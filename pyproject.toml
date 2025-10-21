@@ -1,0 +1,102 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-pal"
+version = "0.1.0"
+description = "A privacy-first hybrid AI cognitive partner with local SLM orchestration"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+    {name = "AI Pal Contributors"}
+]
+keywords = ["ai", "llm", "privacy", "orchestration", "ethics"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+    "torch>=2.0.0",
+    "transformers>=4.30.0",
+    "accelerate>=0.20.0",
+    "sentencepiece>=0.1.99",
+    "protobuf>=3.20.0",
+    "openai>=1.0.0",
+    "anthropic>=0.18.0",
+    "cohere>=4.0.0",
+    "tiktoken>=0.5.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+    "sqlalchemy>=2.0.0",
+    "alembic>=1.11.0",
+    "redis>=4.6.0",
+    "celery>=5.3.0",
+    "presidio-analyzer>=2.2.0",
+    "presidio-anonymizer>=2.2.0",
+    "spacy>=3.6.0",
+    "numpy>=1.24.0",
+    "pandas>=2.0.0",
+    "scikit-learn>=1.3.0",
+    "psutil>=5.9.0",
+    "gputil>=1.4.0",
+    "pynvml>=11.5.0",
+    "cryptography>=41.0.0",
+    "python-dotenv>=1.0.0",
+    "httpx>=0.24.0",
+    "aiohttp>=3.8.0",
+    "loguru>=0.7.0",
+    "rich>=13.0.0",
+    "typer>=0.9.0",
+    "schedule>=1.2.0",
+    "apscheduler>=3.10.0",
+    "jsonschema>=4.18.0",
+    "pyyaml>=6.0",
+    "toml>=0.10.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.7.0",
+    "ruff>=0.0.280",
+    "mypy>=1.4.0",
+    "pre-commit>=3.3.0",
+]
+
+[project.scripts]
+ai-pal = "ai_pal.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 100
+target-version = ["py39", "py310", "py311"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=ai_pal --cov-report=term-missing"
