@@ -135,7 +135,7 @@ Learn your preferences while respecting privacy:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/ai-pal.git
+git clone git@github.com:caseymrobbins/ai-pal.git
 cd ai-pal
 
 # Create virtual environment
