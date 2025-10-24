@@ -18,11 +18,10 @@ from enum import Enum
 
 from loguru import logger
 
-# Phase 1 imports
-# TODO: Fix Phase 1 import mismatch - Phase 3 expects classes that don't exist in Phase 1
-# from ..security.credential_manager import CredentialManager  # Actually: core.credentials.SecureCredentialManager
-# from ..gates.aho_tribunal import AHOTribunal, Verdict, ImpactScore  # Actually: api.aho_tribunal.Appeal
-# from ..gates.gate_system import GateSystem, GateType  # Doesn't exist yet
+# Phase 1 imports (via Phase 1.5 bridge modules)
+from ..security.credential_manager import CredentialManager
+from ..gates.aho_tribunal import AHOTribunal, Verdict, ImpactScore
+from ..gates.gate_system import GateSystem, GateType
 
 # Phase 2 imports
 from ..monitoring.ari_monitor import ARIMonitor, AgencySnapshot
@@ -141,11 +140,10 @@ class IntegratedACSystem:
         self.config = config
         self.config.data_dir.mkdir(parents=True, exist_ok=True)
 
-        # Phase 1 components
-        # TODO: Re-enable when Phase 1 imports are fixed
-        self.credential_manager = None  # CredentialManager(config.credentials_path)
-        self.gate_system = None  # GateSystem() if config.enable_gates else None
-        self.tribunal = None  # AHOTribunal() if config.enable_tribunal else None
+        # Phase 1 components (via Phase 1.5 bridge modules)
+        self.credential_manager = CredentialManager(config.credentials_path)
+        self.gate_system = GateSystem() if config.enable_gates else None
+        self.tribunal = AHOTribunal() if config.enable_tribunal else None
 
         # Phase 2 components
         self.ari_monitor = (

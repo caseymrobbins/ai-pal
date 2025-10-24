@@ -50,6 +50,14 @@ class ImprovementAction(Enum):
     HUMAN_REVIEW_REQUIRED = "human_review_required"
 
 
+class ImprovementStatus(Enum):
+    """Status of an improvement suggestion"""
+    PENDING = "pending"
+    APPROVED = "approved"
+    IMPLEMENTED = "implemented"
+    REJECTED = "rejected"
+
+
 @dataclass
 class FeedbackEvent:
     """Single feedback event"""

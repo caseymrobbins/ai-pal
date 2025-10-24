@@ -87,11 +87,13 @@ class PrivacyStatus:
     # PII detections
     pii_detections_today: int
     pii_detections_total: int
-    pii_actions_taken: Dict[str, int] = field(default_factory=dict)  # action -> count
 
     # Data minimization
     data_retention_days: int
     auto_deletion_enabled: bool
+
+    # Optional fields with defaults
+    pii_actions_taken: Dict[str, int] = field(default_factory=dict)  # action -> count
 
     # Alerts
     budget_near_limit: bool = False
@@ -107,12 +109,9 @@ class ModelUsageStats:
 
     # Usage breakdown
     total_requests: int
-    requests_by_provider: Dict[ModelProvider, int] = field(default_factory=dict)
-    requests_by_model: Dict[str, int] = field(default_factory=dict)
 
     # Cost tracking
     total_cost: float
-    cost_by_provider: Dict[ModelProvider, float] = field(default_factory=dict)
     estimated_cost_savings: float  # vs always using most expensive model
 
     # Performance
@@ -120,7 +119,10 @@ class ModelUsageStats:
     average_quality_score: float
     success_rate: float
 
-    # Recent selections with explanations
+    # Optional fields with defaults
+    requests_by_provider: Dict[ModelProvider, int] = field(default_factory=dict)
+    requests_by_model: Dict[str, int] = field(default_factory=dict)
+    cost_by_provider: Dict[ModelProvider, float] = field(default_factory=dict)
     recent_selections: List[Dict[str, Any]] = field(default_factory=list)
 
 
@@ -129,19 +131,21 @@ class EpistemicDebtStatus:
     """Epistemic debt status for dashboard"""
     # Current debt levels
     total_active_debts: int
-    debts_by_severity: Dict[DebtSeverity, int] = field(default_factory=dict)
-    debts_by_type: Dict[str, int] = field(default_factory=dict)
 
     # Resolution stats
     total_resolved: int
     total_disputed: int
     resolution_rate: float
 
-    # Recent debts
-    recent_debts: List[Dict[str, Any]] = field(default_factory=list)
-
     # Trends
     debt_trend: str  # "improving", "stable", "worsening"
+
+    # Optional fields with defaults
+    debts_by_severity: Dict[DebtSeverity, int] = field(default_factory=dict)
+    debts_by_type: Dict[str, int] = field(default_factory=dict)
+
+    # Recent debts
+    recent_debts: List[Dict[str, Any]] = field(default_factory=list)
 
     # Alerts
     high_severity_count: int = 0
@@ -158,17 +162,18 @@ class ImprovementActivity:
     implemented_count: int
     rejected_count: int
 
-    # Recent actions
-    recent_improvements: List[Dict[str, Any]] = field(default_factory=list)
-
     # Impact tracking
     average_confidence: float
-    improvements_by_component: Dict[str, int] = field(default_factory=dict)
 
     # User feedback integration
     user_feedback_count: int
     gate_violation_count: int
     ari_alert_count: int
+
+    # Optional fields with defaults
+    # Recent actions
+    recent_improvements: List[Dict[str, Any]] = field(default_factory=list)
+    improvements_by_component: Dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -176,8 +181,6 @@ class ContextMemoryStatus:
     """Context memory status for dashboard"""
     # Memory stats
     total_memories: int
-    memories_by_type: Dict[str, int] = field(default_factory=dict)
-    memories_by_priority: Dict[str, int] = field(default_factory=dict)
 
     # Storage
     total_tokens: int
@@ -188,6 +191,10 @@ class ContextMemoryStatus:
     last_consolidation: Optional[datetime]
     unconsolidated_count: int
     needs_consolidation: bool
+
+    # Optional fields with defaults
+    memories_by_type: Dict[str, int] = field(default_factory=dict)
+    memories_by_priority: Dict[str, int] = field(default_factory=dict)
 
     # Recent memories
     recent_memories: List[Dict[str, Any]] = field(default_factory=list)
