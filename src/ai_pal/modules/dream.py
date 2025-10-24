@@ -9,7 +9,7 @@ The Dream Module runs during system downtime to:
 5. Pre-compute likely needed responses
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 import asyncio
