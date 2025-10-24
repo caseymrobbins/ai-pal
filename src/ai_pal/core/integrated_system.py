@@ -158,7 +158,8 @@ class IntegratedACSystem:
         self.edm_monitor = (
             EDMMonitor(
                 storage_dir=config.data_dir / "edm_snapshots",
-                alert_threshold=config.edm_alert_threshold
+                fact_check_enabled=True,
+                auto_resolve_verified=True
             )
             if config.enable_edm_monitoring
             else None
@@ -166,9 +167,7 @@ class IntegratedACSystem:
 
         self.improvement_loop = (
             SelfImprovementLoop(
-                storage_dir=config.data_dir / "improvements",
-                ari_monitor=self.ari_monitor,
-                edm_monitor=self.edm_monitor
+                storage_dir=config.data_dir / "improvements"
             )
             if config.enable_self_improvement
             else None
@@ -200,7 +199,9 @@ class IntegratedACSystem:
         )
 
         self.orchestrator = (
-            MultiModelOrchestrator()
+            MultiModelOrchestrator(
+                storage_dir=config.data_dir / "orchestrator"
+            )
             if config.enable_model_orchestration
             else None
         )

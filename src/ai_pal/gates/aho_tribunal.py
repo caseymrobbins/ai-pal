@@ -78,8 +78,9 @@ class AHOTribunal:
     """
 
     def __init__(self, storage_dir: Optional[str] = None):
-        """Initialize tribunal with storage."""
-        self.db = AHODatabase(storage_dir=storage_dir)
+        """Initialize tribunal with storage (storage_dir ignored - Phase 1 uses default)."""
+        # Note: Phase 1's AHODatabase doesn't accept parameters
+        self.db = AHODatabase()
 
     async def submit_appeal(
         self,
