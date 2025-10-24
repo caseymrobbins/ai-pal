@@ -64,7 +64,13 @@ from .models import (
     FFEMetrics,
 )
 
+from .engine import FractalFlowEngine, create_ffe_engine
+
 __all__ = [
+    # Main Engine
+    "FractalFlowEngine",
+    "create_ffe_engine",
+
     # Enums
     "StrengthType",
     "TaskComplexityLevel",

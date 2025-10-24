@@ -29,45 +29,55 @@ class RewardEmitter(IRewardEmitter):
 
     # Reward templates keyed by strength type
     REWARD_TEMPLATES = {
-        StrengthType.VISUAL_SPATIAL: [
+        StrengthType.VISUAL_THINKING: [
             "✓ Nicely done! You visualized the path forward like the {identity} you are.",
-            "✓ Win! Your spatial thinking broke this down perfectly. That's your {identity} at work.",
+            "✓ Win! Your visual thinking broke this down perfectly. That's your {identity} at work.",
             "✓ Accomplished! You saw the big picture. Classic {identity} strength.",
         ],
-        StrengthType.LOGICAL_MATHEMATICAL: [
+        StrengthType.SPATIAL: [
+            "✓ Nicely done! Your spatial thinking mapped this out like the {identity} you are.",
+            "✓ Win! You saw the structure. That's your {identity} at work.",
+            "✓ Accomplished! You organized the space perfectly. Classic {identity} strength.",
+        ],
+        StrengthType.ANALYTICAL: [
             "✓ Solid work! You reasoned through that systematically like the {identity} you are.",
             "✓ Completed! Your logical approach made this clear. That's your {identity} in action.",
             "✓ Success! You structured this perfectly. Textbook {identity} strength.",
         ],
-        StrengthType.BODILY_KINESTHETIC: [
+        StrengthType.KINESTHETIC: [
             "✓ Done! You built momentum through action like the {identity} you are.",
             "✓ Finished! Your hands-on approach crushed this. That's your {identity} strength.",
             "✓ Complete! You made it tangible. Pure {identity} power.",
         ],
-        StrengthType.LINGUISTIC: [
+        StrengthType.VERBAL: [
             "✓ Nice! You articulated this clearly like the {identity} you are.",
             "✓ Achieved! Your way with words made the path obvious. That's your {identity} talent.",
             "✓ Completed! You expressed this perfectly. Classic {identity} strength.",
         ],
-        StrengthType.INTERPERSONAL: [
-            "✓ Well done! You connected the dots through empathy like the {identity} you are.",
+        StrengthType.SOCIAL: [
+            "✓ Well done! You connected with others like the {identity} you are.",
             "✓ Success! Your people skills guided this. That's your {identity} superpower.",
             "✓ Accomplished! You saw how this affects others. True {identity} strength.",
         ],
-        StrengthType.INTRAPERSONAL: [
-            "✓ Completed! You understood your own capacity like the {identity} you are.",
-            "✓ Done! Your self-awareness kept this on track. That's your {identity} strength.",
-            "✓ Success! You knew yourself well enough to scope this right. Powerful {identity} insight.",
+        StrengthType.EMPATHETIC: [
+            "✓ Well done! You understood the human element like the {identity} you are.",
+            "✓ Success! Your empathy guided this. That's your {identity} gift.",
+            "✓ Accomplished! You connected emotionally. True {identity} strength.",
         ],
-        StrengthType.MUSICAL_RHYTHMIC: [
+        StrengthType.MUSICAL: [
             "✓ Finished! You found the rhythm of this task like the {identity} you are.",
             "✓ Completed! Your sense of flow made this smooth. That's your {identity} gift.",
             "✓ Done! You orchestrated this beautifully. Classic {identity} strength.",
         ],
-        StrengthType.NATURALISTIC: [
-            "✓ Accomplished! You saw the natural patterns like the {identity} you are.",
-            "✓ Complete! Your systems thinking organized this. That's your {identity} talent.",
-            "✓ Success! You understood the ecosystem. True {identity} strength.",
+        StrengthType.SYSTEMATIC: [
+            "✓ Accomplished! You organized this systematically like the {identity} you are.",
+            "✓ Complete! Your systems thinking made this work. That's your {identity} talent.",
+            "✓ Success! You built a perfect system. True {identity} strength.",
+        ],
+        StrengthType.CREATIVE: [
+            "✓ Brilliant! You found a creative solution like the {identity} you are.",
+            "✓ Amazing! Your creativity shined through. That's your {identity} gift.",
+            "✓ Innovative! You thought outside the box. Classic {identity} strength.",
         ],
     }
 
@@ -228,3 +238,27 @@ class RewardEmitter(IRewardEmitter):
     def get_reward_count(self, user_id: str) -> int:
         """Get total number of rewards emitted for user"""
         return self.reward_count_by_user.get(user_id, 0)
+
+    async def get_reward_template(
+        self,
+        strength_type: Optional[str] = None,
+        is_growth_task: bool = False
+    ) -> str:
+        """
+        Get appropriate reward message template
+
+        Args:
+            strength_type: Type of strength used
+            is_growth_task: Was this a bottleneck/growth task?
+
+        Returns:
+            Reward template string
+        """
+        # If strength type provided, get those templates
+        if strength_type:
+            templates = self.REWARD_TEMPLATES.get(strength_type, self.GENERIC_TEMPLATES)
+        else:
+            templates = self.GENERIC_TEMPLATES
+
+        # Return first template (basic version)
+        return templates[0] if templates else "✓ Completed!"
