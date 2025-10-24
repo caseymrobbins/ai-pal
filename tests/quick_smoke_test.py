@@ -75,13 +75,14 @@ def test_dataclass_structure():
     try:
         from ai_pal.context.enhanced_context import MemoryEntry, MemoryType, MemoryPriority
         from ai_pal.privacy.advanced_privacy import PIIDetection, PIIType, PrivacyAction
-        from ai_pal.orchestration.multi_model import ModelCapabilities, TaskRequirements
+        from ai_pal.orchestration.multi_model import ModelCapabilities, TaskRequirements, TaskComplexity
         from datetime import datetime
 
         # Test MemoryEntry creation (without embedding)
         memory = MemoryEntry(
             memory_id="test_1",
             user_id="user_1",
+            session_id="session_1",
             content="Test memory",
             memory_type=MemoryType.FACT,
             priority=MemoryPriority.HIGH,
@@ -99,26 +100,25 @@ def test_dataclass_structure():
         # Test PIIDetection creation
         detection = PIIDetection(
             pii_type=PIIType.EMAIL,
-            detected_value="test@example.com",
-            start_position=0,
-            end_position=16,
+            text="test@example.com",
+            start_pos=0,
+            end_pos=16,
             confidence=0.95,
-            action_taken=PrivacyAction.REDACT,
-            timestamp=datetime.now(),
-            user_id="user_1",
-            session_id="session_1"
+            sensitivity_level="high"
         )
-        assert detection.detected_value == "test@example.com"
+        assert detection.text == "test@example.com"
         print("✓ PIIDetection dataclass works")
 
         # Test TaskRequirements creation
         requirements = TaskRequirements(
-            min_reasoning_capability=0.7,
-            max_cost_per_1k_tokens=0.01,
+            task_type="summarization",
+            complexity=TaskComplexity.SIMPLE,
+            max_cost=0.01,
             max_latency_ms=1000,
-            requires_local_execution=False
+            min_quality=0.7,
+            requires_local=False
         )
-        assert requirements.max_cost_per_1k_tokens == 0.01
+        assert requirements.max_cost == 0.01
         print("✓ TaskRequirements dataclass works")
 
         return True
