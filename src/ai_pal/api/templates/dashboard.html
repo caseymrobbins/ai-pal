@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AHO Tribunal - Appeals & Humanity Override</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+        header {
+            background: #2c3e50;
+            color: white;
+            padding: 1.5rem 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 { font-size: 1.8rem; font-weight: 600; }
+        .subtitle { color: #ecf0f1; font-size: 0.9rem; margin-top: 0.3rem; }
+        .container { max-width: 1200px; margin: 2rem auto; padding: 0 2rem; }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .stat-card h3 {
+            font-size: 0.85rem;
+            color: #7f8c8d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+        }
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+        .stat-card.pending .stat-number { color: #e74c3c; }
+        .stat-card.review .stat-number { color: #f39c12; }
+        .stat-card.total .stat-number { color: #3498db; }
+        .actions {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .actions h2 {
+            margin-bottom: 1.5rem;
+            color: #2c3e50;
+        }
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            background: #3498db;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: 500;
+            transition: background 0.2s;
+            border: none;
+            cursor: pointer;
+            margin-right: 1rem;
+            margin-bottom: 1rem;
+        }
+        .btn:hover { background: #2980b9; }
+        .btn.secondary { background: #95a5a6; }
+        .btn.secondary:hover { background: #7f8c8d; }
+        .btn.danger { background: #e74c3c; }
+        .btn.danger:hover { background: #c0392b; }
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: #7f8c8d;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>AHO Tribunal</h1>
+        <p class="subtitle">Appeals & Humanity Override Dashboard | AC-AI Gate 3 Implementation</p>
+    </header>
+
+    <div class="container">
+        <div class="stats">
+            <div class="stat-card pending">
+                <h3>Pending Appeals</h3>
+                <div class="stat-number">{{ pending_count }}</div>
+            </div>
+            <div class="stat-card review">
+                <h3>Under Review</h3>
+                <div class="stat-number">{{ under_review_count }}</div>
+            </div>
+            <div class="stat-card total">
+                <h3>Total Appeals</h3>
+                <div class="stat-number">{{ total_appeals }}</div>
+            </div>
+        </div>
+
+        <div class="actions">
+            <h2>Quick Actions</h2>
+            <a href="/api/appeals?status=pending" class="btn">View Pending Appeals</a>
+            <a href="/api/appeals" class="btn secondary">View All Appeals</a>
+            <a href="/api/repair-tickets" class="btn secondary">Repair Tickets</a>
+            <a href="/api/audit-log" class="btn secondary">Audit Log</a>
+        </div>
+    </div>
+
+    <footer>
+        <p>AC-AI Framework Implementation | Override-Restore-Repair Workflow</p>
+        <p>Humanity Override ensures users retain ultimate decision-making authority</p>
+    </footer>
+</body>
+</html>

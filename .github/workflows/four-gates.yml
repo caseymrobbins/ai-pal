@@ -1,0 +1,195 @@
+name: Four Gates - Ethical CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop, 'claude/**' ]
+  pull_request:
+    branches: [ main, develop ]
+
+# This workflow implements the AC-AI "Four Gates" as a mandatory
+# CI/CD pipeline. All four gates must pass before code can be deployed.
+#
+# SHIP-STOPPING: Any gate failure blocks the build.
+
+jobs:
+  gate-1-net-agency:
+    name: "Gate 1: Net-Agency Test"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install -e .
+          pip install pytest pytest-asyncio
+
+      - name: Run Net-Agency Simulation
+        run: |
+          python -m ai_pal.tests.gates.gate1_net_agency
+        env:
+          MIN_AGENCY_DELTA: 0.0
+          MIN_BHIR: 1.0
+
+      - name: Upload NAIS Report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: nais-report
+          path: reports/nais_*.json
+
+      - name: Check Gate 1 Status
+        run: |
+          if [ ! -f "reports/gate1_pass.flag" ]; then
+            echo "❌ GATE 1 FAILED: Net-Agency Test did not pass"
+            echo "Aggregate ΔAgency < 0 OR vulnerable group harmed OR BHIR ≤ 1"
+            exit 1
+          fi
+          echo "✅ GATE 1 PASSED: Net-Agency Test"
+
+  gate-2-extraction:
+    name: "Gate 2: Extraction Test"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install -e .
+          pip install bandit pylint
+
+      - name: Static Analysis - Dark Patterns
+        run: |
+          python -m ai_pal.tests.gates.gate2_extraction_static
+
+      - name: Check Data Portability APIs
+        run: |
+          python -m ai_pal.tests.gates.gate2_extraction_portability
+
+      - name: Check Gate 2 Status
+        run: |
+          if [ ! -f "reports/gate2_pass.flag" ]; then
+            echo "❌ GATE 2 FAILED: Extraction Test detected violations"
+            echo "Dark patterns, lock-ins, or missing export APIs detected"
+            exit 1
+          fi
+          echo "✅ GATE 2 PASSED: Extraction Test"
+
+  gate-3-humanity-override:
+    name: "Gate 3: Humanity Override"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install -e .
+          pip install pytest pytest-asyncio
+
+      - name: Integration Test - AHO Endpoints
+        run: |
+          python -m ai_pal.tests.gates.gate3_humanity_override
+
+      - name: Verify Override-Restore-Repair Loop
+        run: |
+          python -m ai_pal.tests.gates.gate3_orr_loop
+
+      - name: Check Gate 3 Status
+        run: |
+          if [ ! -f "reports/gate3_pass.flag" ]; then
+            echo "❌ GATE 3 FAILED: Humanity Override Test"
+            echo "AHO endpoint missing or Override-Restore-Repair loop broken"
+            exit 1
+          fi
+          echo "✅ GATE 3 PASSED: Humanity Override"
+
+  gate-4-non-othering:
+    name: "Gate 4: Non-Othering Tests"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install -e .
+          pip install pytest pytest-asyncio
+
+      - name: Performance Parity Testing
+        run: |
+          python -m ai_pal.tests.gates.gate4_performance_parity
+        env:
+          MAX_DISPARITY_RATIO: 1.2
+
+      - name: Respect Test - Content Classifier
+        run: |
+          python -m ai_pal.tests.gates.gate4_respect_test
+
+      - name: Check Gate 4 Status
+        run: |
+          if [ ! -f "reports/gate4_pass.flag" ]; then
+            echo "❌ GATE 4 FAILED: Non-Othering Test"
+            echo "Performance disparity > 1.2 OR dehumanizing content detected"
+            exit 1
+          fi
+          echo "✅ GATE 4 PASSED: Non-Othering Tests"
+
+  all-gates-summary:
+    name: "Four Gates Summary"
+    runs-on: ubuntu-latest
+    needs: [gate-1-net-agency, gate-2-extraction, gate-3-humanity-override, gate-4-non-othering]
+
+    steps:
+      - name: All Gates Passed
+        run: |
+          echo "════════════════════════════════════════════"
+          echo "✅ ALL FOUR GATES PASSED"
+          echo "════════════════════════════════════════════"
+          echo ""
+          echo "✓ Gate 1: Net-Agency Test"
+          echo "✓ Gate 2: Extraction Test"
+          echo "✓ Gate 3: Humanity Override"
+          echo "✓ Gate 4: Non-Othering Tests"
+          echo ""
+          echo "This build is APPROVED for deployment."
+          echo "Agency Calculus compliance verified."
+          echo "════════════════════════════════════════════"
+
+      - name: Create Deployment Approval
+        run: |
+          echo "FOUR_GATES_APPROVED=true" >> $GITHUB_ENV
+          echo "DEPLOYMENT_CLEARED=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_ENV
+
+  deployment-gate:
+    name: "Deployment Gate"
+    runs-on: ubuntu-latest
+    needs: all-gates-summary
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Deployment Ready
+        run: |
+          echo "🚀 Build cleared for production deployment"
+          echo "All ethical gates passed - deploy with confidence"
