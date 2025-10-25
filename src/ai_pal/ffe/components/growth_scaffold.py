@@ -148,12 +148,13 @@ class GrowthScaffold(IGrowthScaffold):
             bottleneck_id=str(uuid.uuid4()),
             user_id=user_id,
             task_description=task_description,
+            task_category="",  # Could be inferred later
             bottleneck_reason=reason,
-            detected_at=datetime.now(),
-            detection_count=1,
-            avoided_count=1,
-            reframed=False,
-            reframed_at=None
+            detection_method="user_report",
+            avoidance_count=1,
+            last_avoided=datetime.now(),
+            queued=True,
+            queued_date=datetime.now(),
         )
 
         # Queue it

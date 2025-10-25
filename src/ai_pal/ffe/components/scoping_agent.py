@@ -64,8 +64,9 @@ class ScopingAgent(IScopingAgent):
             session_id=str(uuid.uuid4()),
             user_id=goal.user_id,
             input_goal=goal,
-            scoping_iteration=goal.scoping_iteration + 1,
-            started_at=datetime.now()
+            target_complexity=target_complexity,
+            achieved_complexity=goal.complexity_level,
+            scoped_at=datetime.now()
         )
 
         # Identify the 80% win (20% of effort, 80% of value)
@@ -172,14 +173,15 @@ class ScopingAgent(IScopingAgent):
         logger.debug("Reframing 80% win as new 100% goal")
 
         # Reduce complexity level by one step
+        # Complexity hierarchy: MEGA → MACRO → MINI → MICRO → ATOMIC
         current_complexity = parent_goal.complexity_level
-        if current_complexity == TaskComplexityLevel.MACRO:
-            new_complexity = TaskComplexityLevel.COMPLEX
-        elif current_complexity == TaskComplexityLevel.COMPLEX:
-            new_complexity = TaskComplexityLevel.MODERATE
-        elif current_complexity == TaskComplexityLevel.MODERATE:
-            new_complexity = TaskComplexityLevel.SIMPLE
-        elif current_complexity == TaskComplexityLevel.SIMPLE:
+        if current_complexity == TaskComplexityLevel.MEGA:
+            new_complexity = TaskComplexityLevel.MACRO
+        elif current_complexity == TaskComplexityLevel.MACRO:
+            new_complexity = TaskComplexityLevel.MINI
+        elif current_complexity == TaskComplexityLevel.MINI:
+            new_complexity = TaskComplexityLevel.MICRO
+        elif current_complexity == TaskComplexityLevel.MICRO:
             new_complexity = TaskComplexityLevel.ATOMIC
         else:  # Already atomic
             new_complexity = TaskComplexityLevel.ATOMIC

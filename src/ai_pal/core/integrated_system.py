@@ -35,6 +35,10 @@ from ..context.enhanced_context import EnhancedContextManager, MemoryEntry, Memo
 from ..orchestration.multi_model import MultiModelOrchestrator, TaskRequirements, ModelProvider
 from ..ui.agency_dashboard import AgencyDashboard, DashboardSection
 
+# Phase 5 imports (FFE - Fractal Flow Engine)
+from ..ffe.engine import FractalFlowEngine
+from ..ffe.integration import PersonalityModuleConnector, ARIConnector, DashboardConnector
+
 
 class RequestStage(Enum):
     """Stages of request processing"""
@@ -110,6 +114,9 @@ class SystemConfig:
     enable_context_management: bool = True
     enable_model_orchestration: bool = True
     enable_dashboard: bool = True
+
+    # Phase 5 config (FFE - Fractal Flow Engine)
+    enable_ffe: bool = True
 
     # Thresholds
     ari_alert_threshold: float = -0.1
@@ -219,6 +226,34 @@ class IntegratedACSystem:
             else None
         )
 
+        # Phase 5 components (FFE - Fractal Flow Engine)
+        self.ffe_engine = None
+        if config.enable_ffe:
+            # Create FFE connectors
+            personality_connector = (
+                PersonalityModuleConnector(self.context_manager)
+                if self.context_manager
+                else None
+            )
+            ari_connector = (
+                ARIConnector(self.ari_monitor)
+                if self.ari_monitor
+                else None
+            )
+            dashboard_connector = (
+                DashboardConnector(self.dashboard)
+                if self.dashboard
+                else None
+            )
+
+            # Initialize FFE with connectors
+            self.ffe_engine = FractalFlowEngine(
+                storage_dir=config.data_dir / "ffe",
+                personality_connector=personality_connector,
+                ari_connector=ari_connector,
+                dashboard_connector=dashboard_connector,
+            )
+
         logger.info("Integrated AC-AI System initialized successfully")
         logger.info(f"Phase 1: Gates={config.enable_gates}, Tribunal={config.enable_tribunal}")
         logger.info(
@@ -230,6 +265,7 @@ class IntegratedACSystem:
             f"Context={config.enable_context_management}, "
             f"Orchestration={config.enable_model_orchestration}, Dashboard={config.enable_dashboard}"
         )
+        logger.info(f"Phase 5: FFE={config.enable_ffe}")
 
     async def process_request(
         self,
@@ -627,7 +663,8 @@ def create_default_system(data_dir: Path, credentials_path: Path) -> IntegratedA
         enable_privacy_protection=True,
         enable_context_management=True,
         enable_model_orchestration=True,
-        enable_dashboard=True
+        enable_dashboard=True,
+        enable_ffe=True,  # Fractal Flow Engine enabled by default
     )
 
     return IntegratedACSystem(config)

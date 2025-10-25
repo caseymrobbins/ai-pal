@@ -140,13 +140,15 @@ class TimeBlockManager(ITimeBlockManager):
             using_strength=None,
             scheduled_start=None,
             actual_start=None,
-            actual_end=None,
+            actual_duration_minutes=None,
             completed=False,
-            completed_on_time=False,
+            completion_time=None,
             quality_score=0.0,
-            pride_intensity=0.0,
-            estimated_effort=goal.estimated_effort,
-            actual_effort=0.0,
+            reward_emitted=False,
+            reward_text=None,
+            pride_hit_intensity=0.0,
+            triggered_momentum_loop=False,
+            led_to_growth_task=None,
         )
 
         # Store block

@@ -229,7 +229,7 @@ class FractalFlowEngine:
 
         # Mark block complete
         block.completed = True
-        block.actual_end = datetime.now()
+        block.completion_time = datetime.now()
         block.quality_score = quality_score
 
         # Get active loop
