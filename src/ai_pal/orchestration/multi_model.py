@@ -15,7 +15,7 @@ Part of Phase 3: Enhanced Context, Privacy, Multi-Model Orchestration
 
 import asyncio
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, AsyncGenerator
 from dataclasses import dataclass, field
 from enum import Enum
 import json
@@ -23,6 +23,12 @@ from pathlib import Path
 from collections import defaultdict
 
 from loguru import logger
+
+# Import providers for execution
+from ai_pal.models.local import LocalLLMProvider
+from ai_pal.models.anthropic_provider import AnthropicProvider
+from ai_pal.models.openai_provider import OpenAIProvider
+from ai_pal.models.base import LLMRequest, LLMResponse
 
 
 class ModelProvider(Enum):
@@ -190,6 +196,14 @@ class MultiModelOrchestrator:
         # Performance tracking
         self.model_performance: Dict[Tuple[ModelProvider, str], ModelPerformance] = {}
         self._load_performance_data()
+
+        # Provider instances (lazy initialization)
+        self.providers: Dict[ModelProvider, Optional[any]] = {
+            ModelProvider.LOCAL: None,
+            ModelProvider.OPENAI: None,
+            ModelProvider.ANTHROPIC: None,
+            ModelProvider.COHERE: None,
+        }
 
         logger.info(
             f"Multi-Model Orchestrator initialized with {len(self.model_capabilities)} models, "
@@ -637,6 +651,148 @@ class MultiModelOrchestrator:
         reasons.append(f"Selection confidence: {score:.2f}")
 
         return " | ".join(reasons)
+
+    async def _get_provider(self, provider: ModelProvider):
+        """Get or initialize provider instance"""
+        if self.providers[provider] is not None:
+            return self.providers[provider]
+
+        # Initialize provider on demand
+        if provider == ModelProvider.LOCAL:
+            self.providers[provider] = LocalLLMProvider()
+            await self.providers[provider].initialize()
+        elif provider == ModelProvider.OPENAI:
+            self.providers[provider] = OpenAIProvider()
+        elif provider == ModelProvider.ANTHROPIC:
+            self.providers[provider] = AnthropicProvider()
+        else:
+            raise ValueError(f"Unsupported provider: {provider}")
+
+        return self.providers[provider]
+
+    async def execute_model(
+        self,
+        provider: ModelProvider,
+        model_name: str,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 1000,
+        temperature: float = 0.7,
+        top_p: float = 0.9,
+        stop_sequences: Optional[List[str]] = None,
+    ) -> LLMResponse:
+        """
+        Execute model and return response
+
+        Args:
+            provider: Model provider
+            model_name: Model name
+            prompt: User prompt
+            system_prompt: Optional system prompt
+            max_tokens: Maximum tokens to generate
+            temperature: Sampling temperature
+            top_p: Top-p sampling
+            stop_sequences: Optional stop sequences
+
+        Returns:
+            LLMResponse with generated text and metadata
+        """
+        start_time = datetime.now()
+
+        try:
+            # Get provider instance
+            provider_instance = await self._get_provider(provider)
+
+            # Create request
+            request = LLMRequest(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                stop_sequences=stop_sequences or [],
+            )
+
+            # Generate response
+            logger.info(f"Executing {provider.value}:{model_name}")
+            response = await provider_instance.generate(request)
+
+            # Record performance
+            latency_ms = (datetime.now() - start_time).total_seconds() * 1000
+            await self.record_performance(
+                provider=provider,
+                model_name=model_name,
+                latency_ms=latency_ms,
+                cost=response.cost_usd,
+                success=True,
+            )
+
+            logger.info(
+                f"Model execution complete: {model_name}, "
+                f"tokens={response.tokens_used}, "
+                f"cost=${response.cost_usd:.4f}, "
+                f"latency={latency_ms:.0f}ms"
+            )
+
+            return response
+
+        except Exception as e:
+            latency_ms = (datetime.now() - start_time).total_seconds() * 1000
+
+            # Record failure
+            await self.record_performance(
+                provider=provider,
+                model_name=model_name,
+                latency_ms=latency_ms,
+                cost=0.0,
+                success=False,
+                error=str(e),
+            )
+
+            logger.error(f"Model execution failed: {provider.value}:{model_name} - {e}")
+            raise
+
+    async def execute_with_streaming(
+        self,
+        provider: ModelProvider,
+        model_name: str,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 1000,
+        temperature: float = 0.7,
+        top_p: float = 0.9,
+    ) -> AsyncGenerator[str, None]:
+        """
+        Execute model with streaming response
+
+        Args:
+            provider: Model provider
+            model_name: Model name
+            prompt: User prompt
+            system_prompt: Optional system prompt
+            max_tokens: Maximum tokens to generate
+            temperature: Sampling temperature
+            top_p: Top-p sampling
+
+        Yields:
+            Response chunks as they arrive
+        """
+        # Note: Streaming implementation depends on provider
+        # For now, fall back to non-streaming
+        logger.warning(f"Streaming not yet implemented for {provider.value}, using non-streaming")
+
+        response = await self.execute_model(
+            provider=provider,
+            model_name=model_name,
+            prompt=prompt,
+            system_prompt=system_prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+        )
+
+        # Yield complete response
+        yield response.text
 
     async def record_performance(
         self,
