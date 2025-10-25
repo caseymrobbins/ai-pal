@@ -23,6 +23,7 @@ import json
 from pathlib import Path
 import hashlib
 from collections import defaultdict
+import tiktoken
 
 from loguru import logger
 
@@ -172,6 +173,14 @@ class EnhancedContextManager:
         self.session_memories: Dict[str, Set[str]] = defaultdict(set)
         self.tag_index: Dict[str, Set[str]] = defaultdict(set)
         self.type_index: Dict[MemoryType, Set[str]] = defaultdict(set)
+
+        # Token counting (Phase 3.3 enhancement)
+        try:
+            self.tokenizer = tiktoken.get_encoding("cl100k_base")  # GPT-4 encoding
+            logger.info("Initialized tiktoken for accurate token counting")
+        except Exception as e:
+            logger.warning(f"Failed to initialize tiktoken: {e}, using fallback")
+            self.tokenizer = None
 
         # Load existing data
         self._load_memories()
@@ -533,6 +542,148 @@ class EnhancedContextManager:
 
         return window
 
+    def _count_tokens(self, text: str) -> int:
+        """
+        Accurately count tokens in text (Phase 3.3 enhancement)
+
+        Args:
+            text: Text to count tokens for
+
+        Returns:
+            Number of tokens
+        """
+        if self.tokenizer:
+            try:
+                return len(self.tokenizer.encode(text))
+            except Exception as e:
+                logger.warning(f"Token counting failed: {e}, using fallback")
+
+        # Fallback: crude estimation
+        return int(len(text.split()) * 1.3)
+
+    def _calculate_relevance_score(
+        self,
+        memory: MemoryEntry,
+        current_time: Optional[datetime] = None
+    ) -> float:
+        """
+        Calculate comprehensive relevance score (Phase 3.3 enhancement)
+
+        Factors:
+        - Priority (40%): Critical memories always score high
+        - Recency (30%): Recent memories more relevant
+        - Access patterns (20%): Frequently accessed memories more relevant
+        - Time decay (10%): Relevance decays over time
+
+        Args:
+            memory: Memory to score
+            current_time: Current time (defaults to now)
+
+        Returns:
+            Relevance score (0-1)
+        """
+        if current_time is None:
+            current_time = datetime.now()
+
+        score = 0.0
+
+        # Priority component (40%)
+        priority_scores = {
+            MemoryPriority.CRITICAL: 1.0,
+            MemoryPriority.HIGH: 0.8,
+            MemoryPriority.MEDIUM: 0.5,
+            MemoryPriority.LOW: 0.3,
+            MemoryPriority.EPHEMERAL: 0.1
+        }
+        score += priority_scores.get(memory.priority, 0.5) * 0.4
+
+        # Recency component (30%)
+        time_diff = (current_time - memory.timestamp).total_seconds()
+        max_age = self.memory_decay_days * 86400  # days to seconds
+        recency_score = max(0, 1 - (time_diff / max_age))
+        score += recency_score * 0.3
+
+        # Access patterns component (20%)
+        # More accesses = more relevant, with diminishing returns
+        access_score = min(1.0, memory.access_count / 10)
+        score += access_score * 0.2
+
+        # Time decay component (10%)
+        if memory.last_accessed:
+            time_since_access = (current_time - memory.last_accessed).total_seconds()
+            decay_score = max(0, 1 - (time_since_access / max_age))
+            score += decay_score * 0.1
+        else:
+            score += 0.05  # Half score if never accessed
+
+        return min(1.0, score)
+
+    async def _prune_context_window(
+        self,
+        window: ContextWindow,
+        tokens_needed: int
+    ) -> int:
+        """
+        Intelligently prune context window to make space (Phase 3.3 enhancement)
+
+        Args:
+            window: Context window to prune
+            tokens_needed: Number of tokens needed
+
+        Returns:
+            Number of tokens freed
+        """
+        if not window.memory_ids:
+            return 0
+
+        # Calculate relevance scores for all memories in window
+        memory_scores = []
+        for memory_id in window.memory_ids:
+            if memory_id not in self.memories:
+                continue
+
+            memory = self.memories[memory_id]
+            relevance = self._calculate_relevance_score(memory)
+            tokens = self._count_tokens(memory.content)
+
+            memory_scores.append((memory_id, relevance, tokens))
+
+        # Sort by relevance (lowest first)
+        memory_scores.sort(key=lambda x: x[1])
+
+        # Remove least relevant memories until enough space
+        tokens_freed = 0
+        removed_ids = []
+
+        for memory_id, relevance, tokens in memory_scores:
+            if tokens_freed >= tokens_needed:
+                break
+
+            # Don't remove CRITICAL memories
+            memory = self.memories[memory_id]
+            if memory.priority == MemoryPriority.CRITICAL:
+                continue
+
+            removed_ids.append(memory_id)
+            tokens_freed += tokens
+
+            # Track pruned memory
+            window.pruned_memories.append(memory_id)
+
+            logger.debug(
+                f"Pruned memory {memory_id} (relevance: {relevance:.2f}, "
+                f"tokens: {tokens}) from window"
+            )
+
+        # Remove from window
+        for memory_id in removed_ids:
+            window.memory_ids.remove(memory_id)
+            window.total_tokens -= self._count_tokens(self.memories[memory_id].content)
+
+        logger.info(f"Pruned {len(removed_ids)} memories, freed {tokens_freed} tokens")
+
+        return tokens_freed
+
     async def _add_to_context_window(
         self,
         window: ContextWindow,
@@ -544,37 +695,79 @@ class EnhancedContextManager:
 
         memory = self.memories[memory_id]
 
-        # Estimate tokens (rough approximation)
-        memory_tokens = len(memory.content.split()) * 1.3
+        # Accurate token counting (Phase 3.3 enhancement)
+        memory_tokens = self._count_tokens(memory.content)
 
+        # Try to add if space available
         if window.total_tokens + memory_tokens <= window.max_tokens:
             window.memory_ids.append(memory_id)
-            window.total_tokens += int(memory_tokens)
+            window.total_tokens += memory_tokens
+
+            # Update access tracking
+            memory.access_count += 1
+            memory.last_accessed = datetime.now()
+
+            return True
+
+        # No space - try smart pruning (Phase 3.3 enhancement)
+        tokens_needed = memory_tokens - (window.max_tokens - window.total_tokens)
+        tokens_freed = await self._prune_context_window(window, tokens_needed)
+
+        if tokens_freed >= tokens_needed:
+            # Successfully made space, add memory
+            window.memory_ids.append(memory_id)
+            window.total_tokens += memory_tokens
+
+            # Update access tracking
+            memory.access_count += 1
+            memory.last_accessed = datetime.now()
+
+            logger.info(
+                f"Added memory {memory_id} after pruning "
+                f"({tokens_freed} tokens freed)"
+            )
             return True
 
         return False
 
     async def _populate_context_window(self, window: ContextWindow) -> None:
-        """Auto-populate context window with relevant memories"""
+        """
+        Auto-populate context window with relevant memories (Phase 3.3 enhanced)
+
+        Uses comprehensive relevance scoring instead of simple priority+recency
+        """
         # Get session memories
         session_memory_ids = list(self.session_memories[window.session_id])
 
-        # Sort by priority and recency
+        # Calculate relevance score for each memory
+        memory_scores = []
+        for mid in session_memory_ids:
+            if mid not in self.memories:
+                continue
+
+            memory = self.memories[mid]
+            relevance = self._calculate_relevance_score(memory)
+            memory_scores.append((memory, relevance))
+
+        # Sort by relevance (highest first)
         sorted_memories = sorted(
-            [self.memories[mid] for mid in session_memory_ids if mid in self.memories],
-            key=lambda m: (
-                self._priority_score(m.priority),
-                m.timestamp
-            ),
+            memory_scores,
+            key=lambda x: x[1],
             reverse=True
         )
 
         # Add memories until window is full
-        for memory in sorted_memories:
+        for memory, relevance in sorted_memories:
             success = await self._add_to_context_window(window, memory.memory_id)
             if not success:
-                # Window full, consolidate if needed
+                # Window full even after pruning
+                logger.debug(f"Context window full, added {len(window.memory_ids)} memories")
                 break
+
+        logger.info(
+            f"Populated context window with {len(window.memory_ids)} memories, "
+            f"{window.total_tokens}/{window.max_tokens} tokens"
+        )
 
     def _priority_score(self, priority: MemoryPriority) -> int:
         """Convert priority to numeric score"""
