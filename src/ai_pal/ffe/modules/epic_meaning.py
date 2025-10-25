@@ -5,6 +5,12 @@ This module provides the "why" behind the work. It transforms
 task completion from mere productivity into meaningful progress
 toward the user's life vision.
 
+AI-Powered Features:
+- Uses LLM for sophisticated value-goal connections
+- Personalized narrative generation
+- Context-aware meaning intensity calculation
+- Falls back to templates if AI unavailable
+
 Powered by:
 - GoalIngestor (defines the quest)
 - PersonalityModule (provides user's core values)
@@ -69,15 +75,18 @@ class EpicMeaningModule:
     - Celebrates milestones (not just completion)
     """
 
-    def __init__(self, storage_dir: Optional[Path] = None):
+    def __init__(self, storage_dir: Optional[Path] = None, orchestrator=None):
         """
         Initialize Epic Meaning Module
 
         Args:
             storage_dir: Where to persist narrative arcs
+            orchestrator: Optional MultiModelOrchestrator for AI-powered narratives
+                         Falls back to templates if None
         """
         self.storage_dir = storage_dir or Path("./data/epic_meaning")
         self.storage_dir.mkdir(parents=True, exist_ok=True)
+        self.orchestrator = orchestrator
 
         # In-memory cache
         self.narrative_arcs: Dict[str, List[NarrativeArc]] = {}  # user_id -> arcs
@@ -91,7 +100,10 @@ class EpicMeaningModule:
             "milestone": "Milestone reached! This {value}-driven work on {goal} is creating real impact.",
         }
 
-        logger.info(f"Epic Meaning Module initialized with storage at {self.storage_dir}")
+        if orchestrator:
+            logger.info(f"Epic Meaning Module initialized with AI-powered narratives at {self.storage_dir}")
+        else:
+            logger.info(f"Epic Meaning Module initialized with template-based narratives at {self.storage_dir}")
 
     async def generate_narrative(
         self,
@@ -302,15 +314,83 @@ class EpicMeaningModule:
         value: str,
         goal: str
     ) -> str:
-        """Generate narrative connecting task to value and goal"""
+        """
+        Generate narrative connecting task to value and goal
+
+        Uses AI (if available) for meaningful, personalized narratives.
+        Falls back to templates if AI unavailable.
+        """
+        # Try AI-powered narrative first
+        if self.orchestrator:
+            try:
+                narrative = await self._generate_connection_text_ai(task_description, value, goal)
+                logger.debug(f"AI-generated narrative: '{narrative[:50]}...'")
+                return narrative
+            except Exception as e:
+                logger.warning(f"AI narrative generation failed, falling back to template: {e}")
+
+        # Fallback to template
         narratives = [
             f"This work on '{task_description}' brings you closer to {goal}, guided by your value of {value}.",
             f"By focusing on {value} through this task, you're building toward {goal}.",
             f"Each step toward {goal} reflects your commitment to {value}. This task is part of that journey.",
         ]
-
-        # Simple selection
         return narratives[0]
+
+    async def _generate_connection_text_ai(
+        self,
+        task_description: str,
+        value: str,
+        goal: str
+    ) -> str:
+        """AI-powered epic meaning narrative"""
+        from ai_pal.orchestration.multi_model import (
+            TaskRequirements,
+            TaskComplexity,
+        )
+
+        prompt = f"""Create a short narrative connecting this completed task to a life goal and core value.
+
+Task completed: "{task_description}"
+Core value: {value}
+Life goal: {goal}
+
+Write ONE sentence that:
+1. Shows how this task contributes to the life goal
+2. References the core value
+3. Is inspiring and meaningful (not generic)
+4. Makes the user feel their work matters
+
+Examples:
+- "By learning Python, you're building the technical foundation to create tools that serve your community - pure impact-driven work."
+- "This code refactoring honors your value of craftsmanship while advancing your goal of mastering software architecture."
+
+Provide ONLY the narrative sentence, nothing else."""
+
+        requirements = TaskRequirements(
+            complexity=TaskComplexity.TRIVIAL,
+            min_reasoning_capability=0.6,
+            max_cost_per_1k_tokens=0.003,
+            max_latency_ms=2000,
+        )
+
+        selection = await self.orchestrator.select_model(requirements)
+
+        response = await self.orchestrator.execute_model(
+            provider=selection.provider,
+            model_name=selection.model_name,
+            prompt=prompt,
+            temperature=0.7,
+            max_tokens=100,
+        )
+
+        narrative = response.text.strip()
+
+        # Clean up quotes
+        if narrative.startswith('"') and narrative.endswith('"'):
+            narrative = narrative[1:-1]
+
+        return narrative
 
     async def _calculate_meaning_intensity(
         self,

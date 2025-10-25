@@ -1,8 +1,14 @@
 """
-Strength Amplifier Component (Basic MVP Version)
+Strength Amplifier Component
 
 The "pride engine" - transforms generic tasks into personal missions
 by leveraging user's core identity and strengths.
+
+AI-Powered Features:
+- Uses LLM for sophisticated task reframing via strengths
+- Intelligent strength-task matching
+- Personalized reward language generation
+- Falls back to templates if AI unavailable
 """
 
 from typing import List, Optional
@@ -14,10 +20,10 @@ from ..models import PersonalityProfile, SignatureStrength, StrengthType, Atomic
 
 class StrengthAmplifier(IStrengthAmplifier):
     """
-    Basic implementation of Signature Strength Amplifier
+    AI-Powered Signature Strength Amplifier
 
-    Uses template-based reframing to connect tasks to user strengths.
-    Full AI-powered version will be implemented in Phase 5.2.
+    Uses LLM to create personalized task reframings that leverage
+    user's signature strengths. Falls back to templates if AI unavailable.
     """
 
     # Reframing templates by strength type
@@ -74,9 +80,20 @@ class StrengthAmplifier(IStrengthAmplifier):
         ],
     }
 
-    def __init__(self):
-        """Initialize Strength Amplifier"""
-        logger.info("Strength Amplifier initialized (basic MVP version)")
+    def __init__(self, orchestrator=None):
+        """
+        Initialize Strength Amplifier
+
+        Args:
+            orchestrator: Optional MultiModelOrchestrator for AI-powered reframing
+                         Falls back to templates if None
+        """
+        self.orchestrator = orchestrator
+
+        if orchestrator:
+            logger.info("Strength Amplifier initialized with AI-powered reframing")
+        else:
+            logger.info("Strength Amplifier initialized with template-based reframing")
 
     async def identify_strengths(
         self,
@@ -110,6 +127,9 @@ class StrengthAmplifier(IStrengthAmplifier):
         """
         Reframe a generic task through the lens of a signature strength
 
+        Uses AI (if available) for sophisticated, personalized reframing.
+        Falls back to templates if AI unavailable.
+
         Args:
             task_description: Original task description
             strength: Strength to apply
@@ -119,19 +139,98 @@ class StrengthAmplifier(IStrengthAmplifier):
         """
         logger.debug(f"Reframing task via {strength.strength_type.value} strength")
 
+        # Try AI-powered reframing first
+        if self.orchestrator:
+            try:
+                reframed = await self._reframe_task_ai(task_description, strength)
+                logger.info(f"AI-reframed: '{task_description[:30]}...' → '{reframed[:50]}...'")
+                return reframed
+            except Exception as e:
+                logger.warning(f"AI reframing failed, falling back to template: {e}")
+
+        # Fallback to template-based reframing
+        return await self._reframe_task_template(task_description, strength)
+
+    async def _reframe_task_ai(
+        self,
+        task_description: str,
+        strength: SignatureStrength
+    ) -> str:
+        """AI-powered task reframing"""
+        from ai_pal.orchestration.multi_model import (
+            TaskRequirements,
+            TaskComplexity,
+        )
+
+        # Build prompt for reframing
+        identity_label = strength.identity_label or f"{strength.strength_type.value} thinker"
+
+        prompt = f"""Reframe this task to leverage a specific cognitive strength.
+
+Task: "{task_description}"
+Strength: {strength.strength_type.value}
+Identity: {identity_label}
+Proficiency: {strength.proficiency_level:.2f}
+
+Reframe the task in ONE concise sentence that:
+1. Preserves the original goal
+2. Frames it through the lens of this strength
+3. Makes the user feel like using their {identity_label} identity
+4. Is motivating and specific
+
+Examples:
+- Visual thinker doing "write code" → "Visualize the code structure and bring it to life"
+- Analytical thinker doing "plan project" → "Break the project into logical, systematic steps"
+- Creative thinker doing "solve bug" → "Find a creative angle to reimagine this problem"
+
+Provide ONLY the reframed task, nothing else."""
+
+        # Execute with AI
+        requirements = TaskRequirements(
+            complexity=TaskComplexity.TRIVIAL,
+            min_reasoning_capability=0.6,
+            max_cost_per_1k_tokens=0.003,
+            max_latency_ms=2000,
+        )
+
+        selection = await self.orchestrator.select_model(requirements)
+
+        response = await self.orchestrator.execute_model(
+            provider=selection.provider,
+            model_name=selection.model_name,
+            prompt=prompt,
+            temperature=0.7,  # Higher temperature for creative reframing
+            max_tokens=100,
+        )
+
+        # Clean up response
+        reframed = response.text.strip()
+
+        # Remove quotes if present
+        if reframed.startswith('"') and reframed.endswith('"'):
+            reframed = reframed[1:-1]
+
+        return reframed
+
+    async def _reframe_task_template(
+        self,
+        task_description: str,
+        strength: SignatureStrength
+    ) -> str:
+        """Template-based reframing (fallback)"""
         # Get templates for this strength type
         templates = self.REFRAME_TEMPLATES.get(
             strength.strength_type,
             ["Apply your {strength} to {task}"]
         )
 
-        # Use first template (in full version, would rotate or AI-select)
+        # Use first template
         template = templates[0]
 
         # Apply template
         reframed = template.format(task=task_description)
 
-        logger.info(f"Reframed: '{task_description[:30]}...' → '{reframed[:50]}...'")
+        logger.debug(f"Template-reframed: '{reframed[:50]}...'")
 
         return reframed
 

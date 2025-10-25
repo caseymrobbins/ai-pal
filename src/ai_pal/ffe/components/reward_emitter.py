@@ -3,6 +3,11 @@ Reward Emitter Component
 
 Delivers identity-affirming psychological rewards when atomic blocks
 are completed. Uses explicit language from Strength Amplifier.
+
+AI-Powered Features:
+- Uses LLM for personalized, context-aware reward language
+- Adapts tone based on task and user personality
+- Falls back to templates if AI unavailable
 """
 
 import uuid
@@ -90,11 +95,22 @@ class RewardEmitter(IRewardEmitter):
         "✓ Nice work! You made progress.",
     ]
 
-    def __init__(self):
-        """Initialize Reward Emitter"""
+    def __init__(self, orchestrator=None):
+        """
+        Initialize Reward Emitter
+
+        Args:
+            orchestrator: Optional MultiModelOrchestrator for AI-powered rewards
+                         Falls back to templates if None
+        """
+        self.orchestrator = orchestrator
         self.emitted_rewards = {}  # message_id -> RewardMessage
         self.reward_count_by_user = {}  # user_id -> count
-        logger.info("Reward Emitter initialized")
+
+        if orchestrator:
+            logger.info("Reward Emitter initialized with AI-powered rewards")
+        else:
+            logger.info("Reward Emitter initialized with template-based rewards")
 
     async def emit_reward(
         self,
@@ -103,6 +119,9 @@ class RewardEmitter(IRewardEmitter):
     ) -> RewardMessage:
         """
         Generate and emit a reward for completed atomic block
+
+        Uses AI (if available) for personalized, context-aware rewards.
+        Falls back to templates if AI unavailable.
 
         Args:
             block: The completed atomic block
@@ -113,15 +132,118 @@ class RewardEmitter(IRewardEmitter):
         """
         logger.debug(f"Emitting reward for block {block.block_id}")
 
+        # Try AI-powered reward first
+        if self.orchestrator:
+            try:
+                reward_text, identity_label = await self._generate_reward_ai(block, strength)
+                logger.info(f"AI-generated reward: '{reward_text}'")
+            except Exception as e:
+                logger.warning(f"AI reward generation failed, falling back to template: {e}")
+                reward_text, identity_label = await self._generate_reward_template(block, strength)
+        else:
+            reward_text, identity_label = await self._generate_reward_template(block, strength)
+
+        # Create reward message
+        reward = RewardMessage(
+            message_id=str(uuid.uuid4()),
+            user_id=block.user_id,
+            block_id=block.block_id,
+            reward_text=reward_text,
+            strength_referenced=strength.strength_type if strength else None,
+            identity_label_used=identity_label,
+            template_used="ai_generated" if self.orchestrator else "template_based",
+            personalization_elements=[identity_label] if strength else [],
+            emitted_at=datetime.now()
+        )
+
+        # Store reward
+        self.emitted_rewards[reward.message_id] = reward
+        user_rewards = self.reward_count_by_user.get(block.user_id, 0)
+        self.reward_count_by_user[block.user_id] = user_rewards + 1
+
+        logger.info(f"Emitted reward for user {block.user_id}: '{reward.reward_text}'")
+
+        return reward
+
+    async def _generate_reward_ai(
+        self,
+        block: AtomicBlock,
+        strength: Optional[SignatureStrength]
+    ) -> tuple[str, str]:
+        """AI-powered reward generation"""
+        from ai_pal.orchestration.multi_model import (
+            TaskRequirements,
+            TaskComplexity,
+        )
+
+        # Build context
+        identity_label = "capable person"
+        strength_context = ""
+
+        if strength:
+            identity_label = strength.identity_label or f"{strength.strength_type.value} thinker"
+            strength_context = f"User's strength: {strength.strength_type.value} ({identity_label})"
+
+        prompt = f"""Generate a pride-based reward message for completing this task.
+
+Task completed: "{block.title}"
+{strength_context}
+Quality score: {block.quality_score:.2f}
+
+Create ONE short reward message that:
+1. Starts with a checkmark ✓
+2. Acknowledges completion (e.g., "Done!", "Accomplished!", "Nice work!")
+3. References the identity ({identity_label}) if strength provided
+4. Is 1-2 sentences max
+5. Is motivating and pride-focused (NOT shame/fear)
+6. Feels genuine and specific
+
+Examples:
+- "✓ Accomplished! You used your analytical thinking to break this down. That's the strategist in you."
+- "✓ Done! Your hands-on approach crushed it. Pure builder energy."
+- "✓ Nice! You completed {block.title[:30]}. That's real progress."
+
+Provide ONLY the reward message, nothing else."""
+
+        # Execute with AI
+        requirements = TaskRequirements(
+            complexity=TaskComplexity.TRIVIAL,
+            min_reasoning_capability=0.5,
+            max_cost_per_1k_tokens=0.002,
+            max_latency_ms=1500,
+        )
+
+        selection = await self.orchestrator.select_model(requirements)
+
+        response = await self.orchestrator.execute_model(
+            provider=selection.provider,
+            model_name=selection.model_name,
+            prompt=prompt,
+            temperature=0.8,  # Higher temperature for variety
+            max_tokens=80,
+        )
+
+        reward_text = response.text.strip()
+
+        # Clean up quotes
+        if reward_text.startswith('"') and reward_text.endswith('"'):
+            reward_text = reward_text[1:-1]
+
+        return reward_text, identity_label
+
+    async def _generate_reward_template(
+        self,
+        block: AtomicBlock,
+        strength: Optional[SignatureStrength]
+    ) -> tuple[str, str]:
+        """Template-based reward generation (fallback)"""
         # Select template based on strength
         if strength and strength.strength_type:
             templates = self.REWARD_TEMPLATES.get(strength.strength_type, self.GENERIC_TEMPLATES)
             identity_label = strength.identity_label if strength.identity_label else f"{strength.strength_type.value} thinker"
-            strength_type = strength.strength_type
         else:
             templates = self.GENERIC_TEMPLATES
             identity_label = "capable person"
-            strength_type = None
 
         # Pick template (cycle through for variety)
         user_rewards = self.reward_count_by_user.get(block.user_id, 0)
@@ -133,26 +255,7 @@ class RewardEmitter(IRewardEmitter):
         else:
             reward_text = template
 
-        # Create reward message
-        reward = RewardMessage(
-            message_id=str(uuid.uuid4()),
-            user_id=block.user_id,
-            block_id=block.block_id,
-            reward_text=reward_text,
-            strength_referenced=strength_type,
-            identity_label_used=identity_label,
-            template_used="strength_based" if strength else "generic",
-            personalization_elements=[identity_label] if strength else [],
-            emitted_at=datetime.now()
-        )
-
-        # Store reward
-        self.emitted_rewards[reward.message_id] = reward
-        self.reward_count_by_user[block.user_id] = user_rewards + 1
-
-        logger.info(f"Emitted reward for user {block.user_id}: '{reward.reward_text}'")
-
-        return reward
+        return reward_text, identity_label
 
     async def calculate_pride_intensity(
         self,
