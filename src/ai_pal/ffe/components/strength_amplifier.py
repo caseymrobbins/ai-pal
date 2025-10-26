@@ -187,9 +187,8 @@ Provide ONLY the reframed task, nothing else."""
 
         # Execute with AI
         requirements = TaskRequirements(
+            task_type="reframing",
             complexity=TaskComplexity.TRIVIAL,
-            min_reasoning_capability=0.6,
-            max_cost_per_1k_tokens=0.003,
             max_latency_ms=2000,
         )
 
@@ -204,7 +203,7 @@ Provide ONLY the reframed task, nothing else."""
         )
 
         # Clean up response
-        reframed = response.text.strip()
+        reframed = response.generated_text.strip()
 
         # Remove quotes if present
         if reframed.startswith('"') and reframed.endswith('"'):

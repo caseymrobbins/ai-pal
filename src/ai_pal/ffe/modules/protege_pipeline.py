@@ -36,6 +36,20 @@ from ..models import (
     GoalStatus,
 )
 
+# Import orchestration for AI-powered features
+try:
+    from ai_pal.orchestration.multi_model import (
+        MultiModelOrchestrator,
+        TaskRequirements,
+        TaskComplexity,
+        OptimizationGoal,
+        ModelProvider,
+    )
+    AI_AVAILABLE = True
+except ImportError:
+    AI_AVAILABLE = False
+    logger.warning("MultiModelOrchestrator not available, using template-based mode only")
+
 
 @dataclass
 class TeachingSession:
@@ -107,21 +121,37 @@ class ProtegePipeline:
     - Detects knowledge gaps through teaching struggles
     """
 
-    def __init__(self, storage_dir: Optional[Path] = None):
+    def __init__(
+        self,
+        storage_dir: Optional[Path] = None,
+        orchestrator: Optional['MultiModelOrchestrator'] = None,
+        use_ai: bool = True
+    ):
         """
         Initialize Protégé Pipeline
 
         Args:
             storage_dir: Where to persist teaching sessions
+            orchestrator: MultiModelOrchestrator for AI-powered features
+            use_ai: Enable AI-powered generation (falls back to templates if False or unavailable)
         """
         self.storage_dir = storage_dir or Path("./data/protege")
         self.storage_dir.mkdir(parents=True, exist_ok=True)
+
+        # AI configuration
+        self.orchestrator = orchestrator
+        self.use_ai = use_ai and AI_AVAILABLE and orchestrator is not None
+
+        if self.use_ai:
+            logger.info("Protégé Pipeline initialized in AI-powered mode")
+        else:
+            logger.info("Protégé Pipeline initialized in template-based mode")
 
         # In-memory cache
         self.active_sessions: Dict[str, TeachingSession] = {}  # user_id -> session
         self.session_history: Dict[str, TeachingSession] = {}  # session_id -> session
 
-        # Student persona templates
+        # Student persona templates (fallback when AI not available)
         self.student_questions = {
             "clarification": [
                 "I'm not quite following. Could you explain that part again?",
@@ -401,7 +431,14 @@ class ProtegePipeline:
         context: Optional[str] = None
     ) -> str:
         """Generate student question asking for explanation"""
-        # Simple template-based (would use LLM in full version)
+        # Try AI-powered generation first
+        if self.use_ai:
+            try:
+                return await self._generate_student_question_ai(concept, context)
+            except Exception as e:
+                logger.warning(f"AI generation failed, using template fallback: {e}")
+
+        # Template-based fallback
         questions = [
             f"I want to learn about {concept}. Can you teach me?",
             f"What is {concept}? I'm really curious!",
@@ -409,11 +446,63 @@ class ProtegePipeline:
         ]
         return questions[0]
 
-    async def _evaluate_explanation(self, explanation: Explanation) -> Explanation:
-        """Evaluate quality of explanation (simplified version)"""
-        # In full version, would use LLM to evaluate
-        # For now, simple heuristics
+    async def _generate_student_question_ai(
+        self,
+        concept: str,
+        context: Optional[str] = None
+    ) -> str:
+        """Generate student question using AI"""
+        system_prompt = """You are an eager student who wants to learn.
+Ask a genuine, curious question about the concept the user will teach you.
+Be enthusiastic but not overwhelming. Keep it conversational and friendly.
+The question should show you're ready to learn, not test the teacher."""
 
+        user_prompt = f"""Generate a question asking the user to teach you about: {concept}
+
+Context: {context if context else "No additional context"}
+
+Generate ONE question that:
+- Shows genuine curiosity
+- Is encouraging and friendly
+- Makes the user feel like a helpful teacher
+- Is conversational (2-3 sentences max)
+
+Question:"""
+
+        # Select fast, low-cost model for simple generation
+        requirements = TaskRequirements(
+            task_type="simple_generation",
+            complexity=TaskComplexity.SIMPLE,
+            estimated_input_tokens=100,
+            estimated_output_tokens=50,
+        )
+
+        selection = await self.orchestrator.select_model(
+            requirements=requirements,
+            optimization_goal=OptimizationGoal.COST
+        )
+
+        response = await self.orchestrator.execute_model(
+            provider=selection.provider,
+            model_name=selection.model_name,
+            prompt=user_prompt,
+            system_prompt=system_prompt,
+            max_tokens=100,
+            temperature=0.8  # More creative
+        )
+
+        return response.generated_text.strip()
+
+    async def _evaluate_explanation(self, explanation: Explanation) -> Explanation:
+        """Evaluate quality of explanation"""
+        # Try AI-powered evaluation first
+        if self.use_ai:
+            try:
+                return await self._evaluate_explanation_ai(explanation)
+            except Exception as e:
+                logger.warning(f"AI evaluation failed, using heuristic fallback: {e}")
+
+        # Heuristic fallback
         text_length = len(explanation.explanation_text)
 
         # Clarity: based on length and structure
@@ -432,7 +521,7 @@ class ProtegePipeline:
         else:
             explanation.completeness_score = 0.5
 
-        # Depth: based on keywords (simplified)
+        # Depth: based on keywords
         depth_keywords = ["because", "therefore", "for example", "specifically", "in other words"]
         depth_count = sum(1 for kw in depth_keywords if kw in explanation.explanation_text.lower())
         explanation.depth_score = min(1.0, depth_count * 0.2 + 0.3)
@@ -443,8 +532,97 @@ class ProtegePipeline:
 
         return explanation
 
+    async def _evaluate_explanation_ai(self, explanation: Explanation) -> Explanation:
+        """Evaluate explanation quality using AI"""
+        system_prompt = """You are evaluating how well a student explained a concept to you.
+Rate the explanation on three dimensions (0.0-1.0):
+- Clarity: How easy was it to understand?
+- Completeness: Did they cover the important parts?
+- Depth: Did they show deep understanding with examples and reasoning?
+
+Be constructive and fair. Consider that teaching helps learning."""
+
+        user_prompt = f"""Evaluate this explanation of "{explanation.concept}":
+
+"{explanation.explanation_text}"
+
+Provide scores in JSON format:
+{{
+  "clarity": 0.0-1.0,
+  "completeness": 0.0-1.0,
+  "depth": 0.0-1.0,
+  "understood": true/false,
+  "brief_feedback": "one sentence of encouraging feedback"
+}}
+
+JSON:"""
+
+        requirements = TaskRequirements(
+            task_type="evaluation",
+            complexity=TaskComplexity.MODERATE,
+            estimated_input_tokens=200,
+            estimated_output_tokens=100,
+        )
+
+        selection = await self.orchestrator.select_model(
+            requirements=requirements,
+            optimization_goal=OptimizationGoal.BALANCED
+        )
+
+        response = await self.orchestrator.execute_model(
+            provider=selection.provider,
+            model_name=selection.model_name,
+            prompt=user_prompt,
+            system_prompt=system_prompt,
+            max_tokens=150,
+            temperature=0.3  # More deterministic for evaluation
+        )
+
+        # Parse JSON response
+        try:
+            import json
+            result_text = response.generated_text.strip()
+            # Extract JSON if wrapped in markdown
+            if "```json" in result_text:
+                result_text = result_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in result_text:
+                result_text = result_text.split("```")[1].split("```")[0].strip()
+
+            scores = json.loads(result_text)
+
+            explanation.clarity_score = float(scores.get("clarity", 0.5))
+            explanation.completeness_score = float(scores.get("completeness", 0.5))
+            explanation.depth_score = float(scores.get("depth", 0.5))
+            explanation.student_understood = scores.get("understood", False)
+
+            # Use AI feedback if available
+            if "brief_feedback" in scores:
+                explanation.student_feedback = scores["brief_feedback"]
+
+        except Exception as e:
+            logger.warning(f"Failed to parse AI evaluation, using average scores: {e}")
+            # Fallback to conservative scores
+            explanation.clarity_score = 0.6
+            explanation.completeness_score = 0.6
+            explanation.depth_score = 0.6
+            explanation.student_understood = True
+
+        return explanation
+
     async def _generate_student_feedback(self, explanation: Explanation) -> str:
         """Generate feedback from AI student"""
+        # If AI evaluation already provided feedback, use it
+        if explanation.student_feedback and self.use_ai:
+            return explanation.student_feedback
+
+        # Try AI-powered feedback
+        if self.use_ai:
+            try:
+                return await self._generate_student_feedback_ai(explanation)
+            except Exception as e:
+                logger.warning(f"AI feedback generation failed, using template: {e}")
+
+        # Template fallback
         if explanation.student_understood:
             feedback = [
                 f"Ah, I get it now! Thanks for explaining {explanation.concept} so clearly!",
@@ -459,6 +637,48 @@ class ProtegePipeline:
             ]
 
         return feedback[0]
+
+    async def _generate_student_feedback_ai(self, explanation: Explanation) -> str:
+        """Generate personalized student feedback using AI"""
+        understanding_level = "understood it well" if explanation.student_understood else "am still a bit confused"
+
+        system_prompt = """You are an enthusiastic student who just received an explanation.
+Give encouraging, personal feedback that:
+- Thanks the teacher
+- Mentions what you learned (or what you're still unclear on)
+- Keeps the teaching relationship positive
+- Is conversational and genuine (1-2 sentences)"""
+
+        user_prompt = f"""You just heard an explanation of "{explanation.concept}":
+
+"{explanation.explanation_text}"
+
+You {understanding_level}.
+
+Provide feedback as the student (1-2 sentences):"""
+
+        requirements = TaskRequirements(
+            task_type="simple_generation",
+            complexity=TaskComplexity.SIMPLE,
+            estimated_input_tokens=150,
+            estimated_output_tokens=50,
+        )
+
+        selection = await self.orchestrator.select_model(
+            requirements=requirements,
+            optimization_goal=OptimizationGoal.COST
+        )
+
+        response = await self.orchestrator.execute_model(
+            provider=selection.provider,
+            model_name=selection.model_name,
+            prompt=user_prompt,
+            system_prompt=system_prompt,
+            max_tokens=80,
+            temperature=0.9  # Very creative for personality
+        )
+
+        return response.generated_text.strip()
 
     async def _save_session(self, session: TeachingSession) -> None:
         """Persist teaching session"""
