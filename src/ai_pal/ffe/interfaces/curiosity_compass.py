@@ -29,6 +29,19 @@ from ..models import (
     TimeBlockSize,
 )
 
+# Import orchestration for AI-powered features
+try:
+    from ai_pal.orchestration.multi_model import (
+        MultiModelOrchestrator,
+        TaskRequirements,
+        TaskComplexity,
+        OptimizationGoal,
+    )
+    AI_AVAILABLE = True
+except ImportError:
+    AI_AVAILABLE = False
+    logger.warning("MultiModelOrchestrator not available, using template-based mode only")
+
 
 @dataclass
 class CuriosityMap:
@@ -96,7 +109,14 @@ class CuriosityCompass:
     - Pride-based (celebrate discoveries, not completion)
     """
 
-    def __init__(self, growth_scaffold, scoping_agent, strength_amplifier):
+    def __init__(
+        self,
+        growth_scaffold,
+        scoping_agent,
+        strength_amplifier,
+        orchestrator: Optional['MultiModelOrchestrator'] = None,
+        use_ai: bool = True
+    ):
         """
         Initialize Curiosity Compass
 
@@ -104,12 +124,23 @@ class CuriosityCompass:
             growth_scaffold: GrowthScaffold instance
             scoping_agent: ScopingAgent instance
             strength_amplifier: StrengthAmplifier instance
+            orchestrator: MultiModelOrchestrator for AI-powered features
+            use_ai: Enable AI-powered generation (falls back to templates if False or unavailable)
         """
         self.growth_scaffold = growth_scaffold
         self.scoping_agent = scoping_agent
         self.strength_amplifier = strength_amplifier
 
-        # Curiosity templates for reframing
+        # AI configuration
+        self.orchestrator = orchestrator
+        self.use_ai = use_ai and AI_AVAILABLE and orchestrator is not None
+
+        if self.use_ai:
+            logger.info("Curiosity Compass initialized in AI-powered mode")
+        else:
+            logger.info("Curiosity Compass initialized in template-based mode")
+
+        # Curiosity templates for reframing (fallback when AI not available)
         self.curiosity_frames = {
             BottleneckReason.AVOIDED: [
                 "What if we just peeked at {task}? No commitment, just curiosity.",
@@ -295,13 +326,15 @@ class CuriosityCompass:
         bottleneck: BottleneckTask
     ) -> Dict[str, Any]:
         """Create exploration suggestion from bottleneck"""
-        # Reframe using curiosity template
-        templates = self.curiosity_frames.get(
-            bottleneck.bottleneck_reason,
-            self.curiosity_frames[BottleneckReason.UNCLEAR]
-        )
-
-        curiosity_prompt = templates[0].format(task=bottleneck.task_description)
+        # Try AI-powered generation first
+        if self.use_ai:
+            try:
+                curiosity_prompt = await self._generate_curiosity_prompt_ai(bottleneck)
+            except Exception as e:
+                logger.warning(f"AI prompt generation failed, using template: {e}")
+                curiosity_prompt = await self._generate_curiosity_prompt_template(bottleneck)
+        else:
+            curiosity_prompt = await self._generate_curiosity_prompt_template(bottleneck)
 
         suggestion = {
             "bottleneck_id": bottleneck.bottleneck_id,
@@ -313,6 +346,67 @@ class CuriosityCompass:
         }
 
         return suggestion
+
+    async def _generate_curiosity_prompt_template(self, bottleneck: BottleneckTask) -> str:
+        """Generate curiosity prompt using templates"""
+        templates = self.curiosity_frames.get(
+            bottleneck.bottleneck_reason,
+            self.curiosity_frames[BottleneckReason.UNCLEAR]
+        )
+        return templates[0].format(task=bottleneck.task_description)
+
+    async def _generate_curiosity_prompt_ai(self, bottleneck: BottleneckTask) -> str:
+        """Generate personalized curiosity prompt using AI"""
+        reason_contexts = {
+            BottleneckReason.AVOIDED: "The user has been avoiding this task.",
+            BottleneckReason.DIFFICULT: "The user finds this task challenging.",
+            BottleneckReason.BORING: "The user finds this task boring.",
+            BottleneckReason.ANXIETY_INDUCING: "The user feels anxious about this task.",
+            BottleneckReason.SKILL_GAP: "The user lacks skills for this task.",
+            BottleneckReason.UNCLEAR: "The user is unclear about this task.",
+        }
+
+        system_prompt = """You are helping reframe an avoided task as a low-stakes curiosity-driven exploration.
+
+The prompt should:
+- Frame it as exploration, not obligation
+- Emphasize "just 15 minutes"
+- Use curiosity language ("What if...", "I wonder...", "Let's explore...")
+- Sound encouraging and light
+- No pressure or demands
+- Make it sound interesting
+
+Keep it to 1-2 sentences."""
+
+        user_prompt = f"""Task: {bottleneck.task_description}
+
+Context: {reason_contexts.get(bottleneck.bottleneck_reason, "Task needs attention")}
+User has attempted it {bottleneck.attempts} time(s).
+
+Generate a curiosity-driven exploration prompt (1-2 sentences):"""
+
+        requirements = TaskRequirements(
+            task_type="reframing",
+            complexity=TaskComplexity.SIMPLE,
+            estimated_input_tokens=150,
+            estimated_output_tokens=50,
+        )
+
+        selection = await self.orchestrator.select_model(
+            requirements=requirements,
+            optimization_goal=OptimizationGoal.COST
+        )
+
+        response = await self.orchestrator.execute_model(
+            provider=selection.provider,
+            model_name=selection.model_name,
+            prompt=user_prompt,
+            system_prompt=system_prompt,
+            max_tokens=80,
+            temperature=0.8  # Creative
+        )
+
+        return response.generated_text.strip()
 
     async def _create_exploration_opportunity(
         self,
@@ -369,13 +463,82 @@ class CuriosityCompass:
         bottleneck: BottleneckTask
     ) -> List[str]:
         """Generate what user might discover"""
-        # Simple template-based (would be AI-powered in full version)
+        # Try AI-powered generation
+        if self.use_ai:
+            try:
+                return await self._generate_discovery_potential_ai(bottleneck)
+            except Exception as e:
+                logger.warning(f"AI discovery generation failed, using template: {e}")
+
+        # Template fallback
         discoveries = [
             f"How {bottleneck.task_description} actually works",
             f"Why people find {bottleneck.task_description} valuable",
             f"A new angle on {bottleneck.task_description} you hadn't considered",
         ]
         return discoveries
+
+    async def _generate_discovery_potential_ai(self, bottleneck: BottleneckTask) -> List[str]:
+        """Generate discovery potential using AI"""
+        system_prompt = """You are helping someone explore a task they've been avoiding.
+List 3 interesting things they might discover during a 15-minute exploration.
+
+Make them sound:
+- Genuinely interesting and valuable
+- Specific to the task
+- Positive and encouraging
+- Achievable in 15 minutes
+
+Each discovery should be one sentence."""
+
+        user_prompt = f"""Task: {bottleneck.task_description}
+
+Generate 3 discoveries they might make (one per line, numbered):
+
+1."""
+
+        requirements = TaskRequirements(
+            task_type="generation",
+            complexity=TaskComplexity.SIMPLE,
+            estimated_input_tokens=100,
+            estimated_output_tokens=120,
+        )
+
+        selection = await self.orchestrator.select_model(
+            requirements=requirements,
+            optimization_goal=OptimizationGoal.COST
+        )
+
+        response = await self.orchestrator.execute_model(
+            provider=selection.provider,
+            model_name=selection.model_name,
+            prompt=user_prompt,
+            system_prompt=system_prompt,
+            max_tokens=150,
+            temperature=0.8
+        )
+
+        # Parse numbered list
+        discoveries = []
+        lines = response.generated_text.strip().split('\n')
+        for line in lines:
+            line = line.strip()
+            # Remove numbering if present
+            if line and (line[0].isdigit() or line.startswith('-') or line.startswith('•')):
+                # Remove "1. " or "- " or "• " prefix
+                discovery = line.lstrip('0123456789.-• ').strip()
+                if discovery:
+                    discoveries.append(discovery)
+
+        # Fallback if parsing failed
+        if not discoveries:
+            discoveries = [
+                f"How {bottleneck.task_description} actually works",
+                f"Why people find {bottleneck.task_description} valuable",
+                f"A new angle on {bottleneck.task_description} you hadn't considered",
+            ]
+
+        return discoveries[:3]  # Limit to 3
 
     async def _explain_why_interesting(
         self,
