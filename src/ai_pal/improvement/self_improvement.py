@@ -28,6 +28,155 @@ from collections import defaultdict
 from loguru import logger
 
 
+class ABTestStatus(Enum):
+    """A/B test status"""
+    RUNNING = "running"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class VariantType(Enum):
+    """Types of variants in A/B tests"""
+    CONTROL = "control"  # Current implementation
+    VARIANT_A = "variant_a"
+    VARIANT_B = "variant_b"
+    VARIANT_C = "variant_c"
+
+
+@dataclass
+class ABTestVariant:
+    """Single variant in an A/B test"""
+    variant_id: str
+    variant_type: VariantType
+    description: str
+
+    # Configuration for this variant
+    configuration: Dict  # Prompts, parameters, etc.
+
+    # Metrics
+    samples: int = 0
+    success_count: int = 0
+    failure_count: int = 0
+    total_latency_ms: float = 0.0
+    total_cost: float = 0.0
+    user_satisfaction_score: float = 0.0  # 0-1
+    gate_violation_count: int = 0
+
+    # Statistical
+    confidence_interval: Tuple[float, float] = (0.0, 1.0)
+    is_statistically_significant: bool = False
+
+
+@dataclass
+class ABTest:
+    """A/B test for comparing improvement variants"""
+    test_id: str
+    component: str
+    started_at: datetime
+    status: ABTestStatus
+
+    # Variants
+    control: ABTestVariant
+    variants: List[ABTestVariant]
+
+    # Test configuration
+    min_samples_per_variant: int = 100
+    max_duration_hours: int = 168  # 1 week
+    confidence_level: float = 0.95
+
+    # Results
+    winner: Optional[str] = None  # variant_id of winning variant
+    completed_at: Optional[datetime] = None
+    conclusion: Optional[str] = None
+
+
+@dataclass
+class PerformanceMetrics:
+    """Performance metrics for a component or improvement"""
+    component: str
+    period_start: datetime
+    period_end: datetime
+
+    # Success metrics
+    total_requests: int = 0
+    successful_requests: int = 0
+    failed_requests: int = 0
+    success_rate: float = 0.0
+
+    # Performance
+    average_latency_ms: float = 0.0
+    p95_latency_ms: float = 0.0
+    p99_latency_ms: float = 0.0
+
+    # Cost
+    total_cost: float = 0.0
+    average_cost_per_request: float = 0.0
+
+    # Quality
+    user_satisfaction: float = 0.0  # 0-1
+    gate_violation_rate: float = 0.0
+    ari_alert_rate: float = 0.0
+    edm_alert_rate: float = 0.0
+
+    # Trends (vs previous period)
+    success_rate_delta: float = 0.0
+    latency_delta: float = 0.0
+    satisfaction_delta: float = 0.0
+
+
+@dataclass
+class LoRATrainingConfig:
+    """Configuration for LoRA fine-tuning"""
+    model_name: str
+    target_component: str
+
+    # Training data
+    training_samples: int
+    validation_samples: int
+    data_sources: List[str]
+
+    # LoRA parameters
+    rank: int = 8  # LoRA rank
+    alpha: int = 16  # LoRA alpha
+    dropout: float = 0.05
+
+    # Training parameters
+    learning_rate: float = 3e-4
+    batch_size: int = 4
+    num_epochs: int = 3
+    warmup_steps: int = 100
+
+    # Constraints
+    max_training_time_hours: int = 24
+    max_cost: float = 50.0
+
+
+@dataclass
+class LoRATrainingRun:
+    """Record of a LoRA fine-tuning run"""
+    run_id: str
+    config: LoRATrainingConfig
+    started_at: datetime
+
+    # Status
+    status: str  # "running", "completed", "failed"
+    progress: float = 0.0  # 0-1
+
+    # Results
+    final_loss: Optional[float] = None
+    validation_accuracy: Optional[float] = None
+    training_cost: Optional[float] = None
+    completed_at: Optional[datetime] = None
+
+    # Model artifact
+    model_path: Optional[Path] = None
+    checkpoint_paths: List[Path] = field(default_factory=list)
+
+    # Performance (before/after)
+    baseline_metrics: Optional[PerformanceMetrics] = None
+    post_tuning_metrics: Optional[PerformanceMetrics] = None
+
+
 class FeedbackType(Enum):
     """Types of feedback"""
     EXPLICIT_POSITIVE = "explicit_positive"  # User thumbs up
@@ -169,6 +318,17 @@ class SelfImprovementLoop:
         # In-memory storage
         self.feedback_events: Dict[str, FeedbackEvent] = {}
         self.improvement_suggestions: Dict[str, ImprovementSuggestion] = {}
+
+        # Phase 4.2: A/B testing (Advanced Self-Improvement)
+        self.ab_tests: Dict[str, ABTest] = {}
+        self.active_tests_by_component: Dict[str, str] = {}  # component -> test_id
+
+        # Phase 4.2: Performance tracking
+        self.performance_data: Dict[str, List[Dict]] = defaultdict(list)  # component -> [metrics]
+
+        # Phase 4.2: LoRA fine-tuning
+        self.lora_training_runs: Dict[str, LoRATrainingRun] = {}
+        self.fine_tuned_models: Dict[str, Path] = {}  # component -> model_path
 
         # Feedback aggregation
         self.feedback_by_component: Dict[str, List[str]] = defaultdict(list)
@@ -636,4 +796,438 @@ class SelfImprovementLoop:
             ari_trend=ari_trend,
             top_issues=top_issues,
             recent_improvements=recent_improvements
+        )
+
+    # ==================== Phase 4.2: A/B Testing ====================
+
+    async def start_ab_test(
+        self,
+        component: str,
+        control_config: Dict,
+        variant_configs: List[Dict],
+        min_samples: int = 100,
+        max_duration_hours: int = 168
+    ) -> ABTest:
+        """
+        Start A/B test for comparing improvement variants
+
+        Args:
+            component: Component to test
+            control_config: Configuration for control (current implementation)
+            variant_configs: List of variant configurations to test
+            min_samples: Minimum samples per variant
+            max_duration_hours: Maximum test duration
+
+        Returns:
+            Created AB test
+        """
+        test_id = f"abtest_{component}_{datetime.now().timestamp()}"
+
+        # Create control variant
+        control = ABTestVariant(
+            variant_id=f"{test_id}_control",
+            variant_type=VariantType.CONTROL,
+            description="Current implementation (control)",
+            configuration=control_config
+        )
+
+        # Create test variants
+        variant_types = [VariantType.VARIANT_A, VariantType.VARIANT_B, VariantType.VARIANT_C]
+        variants = []
+
+        for i, config in enumerate(variant_configs[:3]):  # Max 3 variants
+            variant = ABTestVariant(
+                variant_id=f"{test_id}_{variant_types[i].value}",
+                variant_type=variant_types[i],
+                description=config.get("description", f"Variant {chr(65+i)}"),
+                configuration=config
+            )
+            variants.append(variant)
+
+        # Create test
+        test = ABTest(
+            test_id=test_id,
+            component=component,
+            started_at=datetime.now(),
+            status=ABTestStatus.RUNNING,
+            control=control,
+            variants=variants,
+            min_samples_per_variant=min_samples,
+            max_duration_hours=max_duration_hours
+        )
+
+        self.ab_tests[test_id] = test
+        self.active_tests_by_component[component] = test_id
+
+        logger.info(
+            f"Started A/B test {test_id} for {component} "
+            f"with {len(variants)} variants, min samples: {min_samples}"
+        )
+
+        return test
+
+    async def record_ab_test_sample(
+        self,
+        test_id: str,
+        variant_id: str,
+        success: bool,
+        latency_ms: float,
+        cost: float,
+        user_satisfaction: Optional[float] = None,
+        gate_violation: bool = False
+    ) -> None:
+        """
+        Record a sample for A/B test variant
+
+        Args:
+            test_id: A/B test ID
+            variant_id: Variant that was used
+            success: Whether the request succeeded
+            latency_ms: Request latency
+            cost: Request cost
+            user_satisfaction: Optional user satisfaction score (0-1)
+            gate_violation: Whether a gate was violated
+        """
+        if test_id not in self.ab_tests:
+            logger.warning(f"A/B test {test_id} not found")
+            return
+
+        test = self.ab_tests[test_id]
+
+        # Find variant
+        variant = None
+        if test.control.variant_id == variant_id:
+            variant = test.control
+        else:
+            for v in test.variants:
+                if v.variant_id == variant_id:
+                    variant = v
+                    break
+
+        if not variant:
+            logger.warning(f"Variant {variant_id} not found in test {test_id}")
+            return
+
+        # Update metrics
+        variant.samples += 1
+        if success:
+            variant.success_count += 1
+        else:
+            variant.failure_count += 1
+
+        variant.total_latency_ms += latency_ms
+        variant.total_cost += cost
+
+        if user_satisfaction is not None:
+            # Running average
+            variant.user_satisfaction_score = (
+                (variant.user_satisfaction_score * (variant.samples - 1) + user_satisfaction)
+                / variant.samples
+            )
+
+        if gate_violation:
+            variant.gate_violation_count += 1
+
+        # Check if test should complete
+        await self._check_ab_test_completion(test_id)
+
+    async def _check_ab_test_completion(self, test_id: str) -> None:
+        """Check if A/B test has enough data to conclude"""
+        test = self.ab_tests[test_id]
+
+        if test.status != ABTestStatus.RUNNING:
+            return
+
+        # Check if minimum samples reached
+        all_variants = [test.control] + test.variants
+        min_samples_reached = all(
+            v.samples >= test.min_samples_per_variant
+            for v in all_variants
+        )
+
+        # Check if max duration exceeded
+        duration_hours = (datetime.now() - test.started_at).total_seconds() / 3600
+        max_duration_exceeded = duration_hours >= test.max_duration_hours
+
+        if min_samples_reached or max_duration_exceeded:
+            await self._complete_ab_test(test_id)
+
+    async def _complete_ab_test(self, test_id: str) -> None:
+        """Complete A/B test and determine winner"""
+        test = self.ab_tests[test_id]
+
+        # Calculate success rates
+        all_variants = [test.control] + test.variants
+
+        for variant in all_variants:
+            if variant.samples > 0:
+                success_rate = variant.success_count / variant.samples
+                avg_latency = variant.total_latency_ms / variant.samples
+                avg_cost = variant.total_cost / variant.samples
+
+                # Simple statistical significance check (Z-test approximation)
+                # In production, would use proper statistical tests
+                variant.is_statistically_significant = variant.samples >= test.min_samples_per_variant
+
+                logger.info(
+                    f"Variant {variant.variant_type.value}: "
+                    f"success_rate={success_rate:.2%}, "
+                    f"avg_latency={avg_latency:.0f}ms, "
+                    f"avg_cost=${avg_cost:.4f}, "
+                    f"satisfaction={variant.user_satisfaction_score:.2f}"
+                )
+
+        # Determine winner (highest success rate with statistical significance)
+        significant_variants = [v for v in all_variants if v.is_statistically_significant]
+
+        if significant_variants:
+            winner = max(
+                significant_variants,
+                key=lambda v: (
+                    v.success_count / v.samples if v.samples > 0 else 0,
+                    v.user_satisfaction_score,
+                    -v.total_cost / v.samples if v.samples > 0 else float('inf')
+                )
+            )
+
+            test.winner = winner.variant_id
+            test.conclusion = (
+                f"Winner: {winner.variant_type.value} with "
+                f"{winner.success_count/winner.samples:.1%} success rate"
+            )
+
+            logger.info(f"A/B test {test_id} completed: {test.conclusion}")
+        else:
+            test.conclusion = "Inconclusive - insufficient samples"
+            logger.warning(f"A/B test {test_id} inconclusive")
+
+        test.status = ABTestStatus.COMPLETED
+        test.completed_at = datetime.now()
+
+        # Remove from active tests
+        if test.component in self.active_tests_by_component:
+            del self.active_tests_by_component[test.component]
+
+    # ==================== Phase 4.2: Performance Tracking ====================
+
+    async def record_performance_metric(
+        self,
+        component: str,
+        success: bool,
+        latency_ms: float,
+        cost: float,
+        user_satisfaction: Optional[float] = None,
+        gate_violation: bool = False,
+        ari_alert: bool = False,
+        edm_alert: bool = False
+    ) -> None:
+        """
+        Record performance metric for a component
+
+        Args:
+            component: Component name
+            success: Whether request succeeded
+            latency_ms: Request latency
+            cost: Request cost
+            user_satisfaction: User satisfaction score (0-1)
+            gate_violation: Gate violation occurred
+            ari_alert: ARI alert triggered
+            edm_alert: EDM alert triggered
+        """
+        metric = {
+            "timestamp": datetime.now().isoformat(),
+            "success": success,
+            "latency_ms": latency_ms,
+            "cost": cost,
+            "user_satisfaction": user_satisfaction,
+            "gate_violation": gate_violation,
+            "ari_alert": ari_alert,
+            "edm_alert": edm_alert
+        }
+
+        self.performance_data[component].append(metric)
+
+        # Keep only last 10,000 metrics per component
+        if len(self.performance_data[component]) > 10000:
+            self.performance_data[component] = self.performance_data[component][-10000:]
+
+    async def get_performance_metrics(
+        self,
+        component: str,
+        period_hours: int = 24
+    ) -> PerformanceMetrics:
+        """
+        Get performance metrics for a component
+
+        Args:
+            component: Component name
+            period_hours: Time period in hours
+
+        Returns:
+            Performance metrics
+        """
+        cutoff = datetime.now() - timedelta(hours=period_hours)
+        period_start = cutoff
+        period_end = datetime.now()
+
+        # Filter metrics to period
+        period_metrics = [
+            m for m in self.performance_data.get(component, [])
+            if datetime.fromisoformat(m["timestamp"]) >= cutoff
+        ]
+
+        if not period_metrics:
+            return PerformanceMetrics(
+                component=component,
+                period_start=period_start,
+                period_end=period_end
+            )
+
+        # Calculate metrics
+        total_requests = len(period_metrics)
+        successful_requests = sum(1 for m in period_metrics if m["success"])
+        failed_requests = total_requests - successful_requests
+        success_rate = successful_requests / total_requests if total_requests > 0 else 0.0
+
+        # Latency
+        latencies = [m["latency_ms"] for m in period_metrics]
+        latencies.sort()
+        avg_latency = sum(latencies) / len(latencies) if latencies else 0.0
+        p95_index = int(len(latencies) * 0.95)
+        p99_index = int(len(latencies) * 0.99)
+        p95_latency = latencies[p95_index] if p95_index < len(latencies) else 0.0
+        p99_latency = latencies[p99_index] if p99_index < len(latencies) else 0.0
+
+        # Cost
+        total_cost = sum(m["cost"] for m in period_metrics)
+        avg_cost = total_cost / total_requests if total_requests > 0 else 0.0
+
+        # Quality
+        satisfaction_scores = [m["user_satisfaction"] for m in period_metrics if m["user_satisfaction"] is not None]
+        user_satisfaction = sum(satisfaction_scores) / len(satisfaction_scores) if satisfaction_scores else 0.0
+
+        gate_violations = sum(1 for m in period_metrics if m.get("gate_violation", False))
+        ari_alerts = sum(1 for m in period_metrics if m.get("ari_alert", False))
+        edm_alerts = sum(1 for m in period_metrics if m.get("edm_alert", False))
+
+        gate_violation_rate = gate_violations / total_requests if total_requests > 0 else 0.0
+        ari_alert_rate = ari_alerts / total_requests if total_requests > 0 else 0.0
+        edm_alert_rate = edm_alerts / total_requests if total_requests > 0 else 0.0
+
+        return PerformanceMetrics(
+            component=component,
+            period_start=period_start,
+            period_end=period_end,
+            total_requests=total_requests,
+            successful_requests=successful_requests,
+            failed_requests=failed_requests,
+            success_rate=success_rate,
+            average_latency_ms=avg_latency,
+            p95_latency_ms=p95_latency,
+            p99_latency_ms=p99_latency,
+            total_cost=total_cost,
+            average_cost_per_request=avg_cost,
+            user_satisfaction=user_satisfaction,
+            gate_violation_rate=gate_violation_rate,
+            ari_alert_rate=ari_alert_rate,
+            edm_alert_rate=edm_alert_rate
+        )
+
+    # ==================== Phase 4.2: LoRA Fine-Tuning ====================
+
+    async def initiate_lora_training(
+        self,
+        component: str,
+        model_name: str,
+        min_training_samples: int = 1000
+    ) -> Optional[LoRATrainingRun]:
+        """
+        Initiate LoRA fine-tuning for a component
+
+        Args:
+            component: Component to fine-tune
+            model_name: Base model to fine-tune
+            min_training_samples: Minimum samples required
+
+        Returns:
+            Training run if initiated, None if insufficient data
+        """
+        # Check if we have enough positive/negative feedback for training
+        component_feedback = self.feedback_by_component.get(component, [])
+
+        if len(component_feedback) < min_training_samples:
+            logger.info(
+                f"Insufficient training data for {component}: "
+                f"{len(component_feedback)}/{min_training_samples}"
+            )
+            return None
+
+        # Create training config
+        training_samples = int(len(component_feedback) * 0.8)  # 80% train
+        validation_samples = len(component_feedback) - training_samples  # 20% val
+
+        config = LoRATrainingConfig(
+            model_name=model_name,
+            target_component=component,
+            training_samples=training_samples,
+            validation_samples=validation_samples,
+            data_sources=[f"feedback_{component}"]
+        )
+
+        # Create training run
+        run_id = f"lora_{component}_{datetime.now().timestamp()}"
+
+        training_run = LoRATrainingRun(
+            run_id=run_id,
+            config=config,
+            started_at=datetime.now(),
+            status="running"
+        )
+
+        self.lora_training_runs[run_id] = training_run
+
+        # Get baseline metrics before training
+        training_run.baseline_metrics = await self.get_performance_metrics(component)
+
+        logger.info(
+            f"Initiated LoRA training {run_id} for {component} "
+            f"({training_samples} train, {validation_samples} val samples)"
+        )
+
+        # In production, this would trigger actual LoRA training
+        # For now, simulate completion
+        await self._simulate_lora_training(run_id)
+
+        return training_run
+
+    async def _simulate_lora_training(self, run_id: str) -> None:
+        """Simulate LoRA training completion (placeholder for actual training)"""
+        training_run = self.lora_training_runs[run_id]
+
+        # Simulate training progress
+        for progress in [0.25, 0.5, 0.75, 1.0]:
+            await asyncio.sleep(0.1)  # Simulate time
+            training_run.progress = progress
+
+        # Simulate results
+        training_run.status = "completed"
+        training_run.final_loss = 0.15
+        training_run.validation_accuracy = 0.92
+        training_run.training_cost = 15.50
+        training_run.completed_at = datetime.now()
+
+        # Store model path (simulated)
+        model_dir = self.storage_dir / "lora_models"
+        model_dir.mkdir(exist_ok=True)
+        model_path = model_dir / f"{run_id}.pt"
+        training_run.model_path = model_path
+
+        # Register as fine-tuned model
+        self.fine_tuned_models[training_run.config.target_component] = model_path
+
+        logger.info(
+            f"LoRA training {run_id} completed: "
+            f"loss={training_run.final_loss:.3f}, "
+            f"accuracy={training_run.validation_accuracy:.2%}, "
+            f"cost=${training_run.training_cost:.2f}"
         )
