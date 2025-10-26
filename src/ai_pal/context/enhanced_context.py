@@ -24,8 +24,16 @@ from pathlib import Path
 import hashlib
 from collections import defaultdict
 import tiktoken
+import torch
 
 from loguru import logger
+
+try:
+    from transformers import AutoTokenizer, AutoModel
+    TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    TRANSFORMERS_AVAILABLE = False
+    logger.warning("transformers not available, falling back to hash-based embeddings")
 
 
 class MemoryType(Enum):
@@ -143,7 +151,8 @@ class EnhancedContextManager:
         max_context_tokens: int = 4096,
         memory_decay_days: int = 90,
         consolidation_threshold: int = 50,  # Consolidate after N memories
-        enable_semantic_search: bool = True
+        enable_semantic_search: bool = True,
+        embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     ):
         """
         Initialize Enhanced Context Manager
@@ -154,6 +163,7 @@ class EnhancedContextManager:
             memory_decay_days: Days before memory relevance decays
             consolidation_threshold: Number of memories before consolidation
             enable_semantic_search: Enable semantic similarity search
+            embedding_model: HuggingFace model for embeddings
         """
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
@@ -182,13 +192,36 @@ class EnhancedContextManager:
             logger.warning(f"Failed to initialize tiktoken: {e}, using fallback")
             self.tokenizer = None
 
+        # Initialize embedding model
+        self.embedding_tokenizer = None
+        self.embedding_model = None
+        if enable_semantic_search and TRANSFORMERS_AVAILABLE:
+            try:
+                logger.info(f"Loading embedding model: {embedding_model}")
+                self.embedding_tokenizer = AutoTokenizer.from_pretrained(embedding_model)
+                self.embedding_model = AutoModel.from_pretrained(embedding_model)
+                self.embedding_model.eval()  # Set to evaluation mode
+
+                # Move to GPU if available
+                if torch.cuda.is_available():
+                    self.embedding_model = self.embedding_model.to('cuda')
+                    logger.info("Embedding model loaded on GPU")
+                else:
+                    logger.info("Embedding model loaded on CPU")
+            except Exception as e:
+                logger.warning(f"Failed to load embedding model: {e}, using hash-based fallback")
+                self.embedding_tokenizer = None
+                self.embedding_model = None
+
         # Load existing data
         self._load_memories()
         self._load_threads()
 
         logger.info(
             f"Enhanced Context Manager initialized with storage at {storage_dir}, "
-            f"max context: {max_context_tokens} tokens"
+            f"max context: {max_context_tokens} tokens, "
+            f"semantic search: {enable_semantic_search}, "
+            f"embedding model loaded: {self.embedding_model is not None}"
         )
 
     def _load_memories(self) -> None:
@@ -345,18 +378,58 @@ class EnhancedContextManager:
 
     async def _generate_embedding(self, text: str) -> List[float]:
         """
-        Generate semantic embedding for text
+        Generate semantic embedding for text using transformer model
 
-        In production, this would use a sentence transformer model
-        For now, returns placeholder
+        Uses a pre-trained sentence transformer model for semantic embeddings.
+        Falls back to hash-based embeddings if model not available.
         """
-        # TODO: Integrate with actual embedding model
-        # e.g., sentence-transformers, OpenAI embeddings, etc.
+        if self.embedding_model is None or self.embedding_tokenizer is None:
+            # Fallback: simple hash-based pseudo-embedding
+            hash_val = hashlib.sha256(text.encode()).hexdigest()
+            embedding = [int(hash_val[i:i+2], 16) / 255.0 for i in range(0, 32, 2)]
+            return embedding
 
-        # Placeholder: simple hash-based pseudo-embedding
-        hash_val = hashlib.sha256(text.encode()).hexdigest()
-        embedding = [int(hash_val[i:i+2], 16) / 255.0 for i in range(0, 32, 2)]
-        return embedding
+        try:
+            # Tokenize input
+            inputs = self.embedding_tokenizer(
+                text,
+                padding=True,
+                truncation=True,
+                max_length=512,
+                return_tensors="pt"
+            )
+
+            # Move to same device as model
+            if torch.cuda.is_available():
+                inputs = {k: v.to('cuda') for k, v in inputs.items()}
+
+            # Generate embeddings
+            with torch.no_grad():
+                outputs = self.embedding_model(**inputs)
+
+                # Use mean pooling over token embeddings
+                token_embeddings = outputs.last_hidden_state
+                attention_mask = inputs['attention_mask']
+
+                # Mean pooling with attention mask
+                input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+                sum_embeddings = torch.sum(token_embeddings * input_mask_expanded, 1)
+                sum_mask = torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+                embeddings = sum_embeddings / sum_mask
+
+                # Normalize embeddings
+                embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
+
+                # Convert to list
+                embedding_list = embeddings.cpu().numpy()[0].tolist()
+                return embedding_list
+
+        except Exception as e:
+            logger.error(f"Failed to generate embedding: {e}, using hash fallback")
+            # Fallback to hash-based embedding
+            hash_val = hashlib.sha256(text.encode()).hexdigest()
+            embedding = [int(hash_val[i:i+2], 16) / 255.0 for i in range(0, 32, 2)]
+            return embedding
 
     async def _persist_memory(self, memory: MemoryEntry) -> None:
         """Persist memory to disk"""

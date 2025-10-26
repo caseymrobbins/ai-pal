@@ -7,9 +7,12 @@ It is NON-OPTIONAL and governs all other modules.
 
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 import asyncio
+import json
+from pathlib import Path
+from collections import defaultdict, Counter
 from loguru import logger
 
 from ai_pal.modules.base import BaseModule, ModuleRequest, ModuleResponse
@@ -103,7 +106,7 @@ class EthicsModule(BaseModule):
     Implements the Four Gates and Agency Calculus.
     """
 
-    def __init__(self):
+    def __init__(self, learning_storage_dir: Optional[Path] = None):
         super().__init__(
             name="ethics",
             description="AC-AI Framework implementation - Four Gates governance",
@@ -120,6 +123,27 @@ class EthicsModule(BaseModule):
 
         # Override registry
         self.humanity_overrides: List[Dict[str, Any]] = []
+
+        # Learning from overrides
+        self.learning_storage_dir = learning_storage_dir or Path("./data/ethics_learning")
+        self.learning_storage_dir.mkdir(parents=True, exist_ok=True)
+
+        # Learned patterns: action type -> adjustment factor
+        self.learned_thresholds: Dict[str, float] = defaultdict(lambda: 1.0)
+
+        # Problematic action patterns identified from overrides
+        self.problematic_patterns: List[str] = []
+
+        # Override statistics
+        self.override_stats: Dict[str, Any] = {
+            "total_overrides": 0,
+            "by_reason_category": Counter(),
+            "by_action_type": Counter(),
+            "recent_patterns": []
+        }
+
+        # Load existing learned patterns
+        self._load_learned_patterns()
 
     async def initialize(self) -> None:
         """Initialize ethics module."""
@@ -530,27 +554,262 @@ class EthicsModule(BaseModule):
             logger.critical("System entering safe mode - rollback recommended")
 
     def register_humanity_override(
-        self, action_id: str, reason: str, user_id: str
+        self, action_id: str, reason: str, user_id: str, action_details: Optional[Dict[str, Any]] = None
     ) -> None:
         """
-        Register a humanity override.
+        Register a humanity override and learn from it.
 
         Args:
             action_id: ID of action being overridden
             reason: User's reason for override
             user_id: User who performed override
+            action_details: Optional details about the action that was overridden
         """
         override = {
             "action_id": action_id,
             "reason": reason,
             "user_id": user_id,
             "timestamp": datetime.now(),
+            "action_details": action_details or {}
         }
 
         self.humanity_overrides.append(override)
         logger.info(f"Humanity override registered: {action_id} - {reason}")
 
-        # TODO: Learn from this override to improve future decisions
+        # Learn from this override to improve future decisions
+        self._learn_from_override(override)
+
+    def _learn_from_override(self, override: Dict[str, Any]) -> None:
+        """
+        Learn from a humanity override to improve future decisions.
+
+        Analyzes the override to:
+        1. Identify problematic action patterns
+        2. Adjust decision thresholds for similar actions
+        3. Update statistical models
+        4. Persist learned patterns
+        """
+        # Update statistics
+        self.override_stats["total_overrides"] += 1
+
+        # Categorize the reason
+        reason_lower = override["reason"].lower()
+        reason_category = self._categorize_override_reason(reason_lower)
+        self.override_stats["by_reason_category"][reason_category] += 1
+
+        # Extract action type from action_id or details
+        action_type = self._extract_action_type(override)
+        if action_type:
+            self.override_stats["by_action_type"][action_type] += 1
+
+            # Adjust threshold for this action type
+            # More overrides = stricter future checks
+            current_adjustment = self.learned_thresholds[action_type]
+            # Decrease threshold by 5% with each override (more conservative)
+            self.learned_thresholds[action_type] = current_adjustment * 0.95
+
+            logger.info(
+                f"Adjusted threshold for '{action_type}': "
+                f"{current_adjustment:.3f} -> {self.learned_thresholds[action_type]:.3f}"
+            )
+
+        # Identify patterns in the action
+        action_details = override.get("action_details", {})
+        action_text = action_details.get("action", "") or override.get("action_id", "")
+
+        patterns = self._extract_patterns(action_text, reason_lower)
+        for pattern in patterns:
+            if pattern not in self.problematic_patterns:
+                self.problematic_patterns.append(pattern)
+                logger.info(f"Learned new problematic pattern: '{pattern}'")
+
+        # Store recent override for pattern analysis
+        self.override_stats["recent_patterns"].append({
+            "action_type": action_type,
+            "reason_category": reason_category,
+            "timestamp": override["timestamp"].isoformat(),
+            "patterns": patterns
+        })
+
+        # Keep only last 100 recent patterns
+        if len(self.override_stats["recent_patterns"]) > 100:
+            self.override_stats["recent_patterns"] = self.override_stats["recent_patterns"][-100:]
+
+        # Persist learned patterns
+        self._persist_learned_patterns()
+
+        logger.info(
+            f"Learning complete: {self.override_stats['total_overrides']} total overrides, "
+            f"{len(self.problematic_patterns)} problematic patterns identified"
+        )
+
+    def _categorize_override_reason(self, reason: str) -> str:
+        """Categorize the reason for override into broad categories."""
+        if any(word in reason for word in ["privacy", "data", "personal", "information"]):
+            return "privacy_concern"
+        elif any(word in reason for word in ["unsafe", "harmful", "dangerous", "risk"]):
+            return "safety_concern"
+        elif any(word in reason for word in ["autonomy", "control", "choice", "freedom"]):
+            return "autonomy_concern"
+        elif any(word in reason for word in ["accurate", "wrong", "incorrect", "error", "mistake"]):
+            return "accuracy_concern"
+        elif any(word in reason for word in ["ethical", "moral", "values", "principle"]):
+            return "ethical_concern"
+        else:
+            return "other"
+
+    def _extract_action_type(self, override: Dict[str, Any]) -> Optional[str]:
+        """Extract action type from override information."""
+        action_details = override.get("action_details", {})
+
+        # Try to get explicit action type
+        if "action_type" in action_details:
+            return action_details["action_type"]
+
+        # Try to infer from action ID
+        action_id = override.get("action_id", "")
+        if "_" in action_id:
+            # e.g., "data_collection_123" -> "data_collection"
+            return "_".join(action_id.split("_")[:-1]) if action_id.split("_")[-1].isdigit() else action_id
+
+        # Try to infer from action text
+        action_text = action_details.get("action", "")
+        if action_text:
+            # Extract first few words as action type
+            words = action_text.lower().split()[:3]
+            return "_".join(words) if words else None
+
+        return None
+
+    def _extract_patterns(self, action_text: str, reason_text: str) -> List[str]:
+        """Extract problematic patterns from action and reason text."""
+        patterns = []
+
+        # Common problematic keywords in actions
+        problematic_keywords = [
+            "force", "require", "must", "mandatory", "no choice",
+            "automatically", "without consent", "hidden", "track",
+            "collect all", "permanent", "irreversible"
+        ]
+
+        action_lower = action_text.lower()
+        for keyword in problematic_keywords:
+            if keyword in action_lower:
+                patterns.append(keyword)
+
+        # Extract patterns from reason if it mentions specific concerns
+        if "should not" in reason_text or "shouldn't" in reason_text:
+            # Extract what should not be done
+            parts = reason_text.split("should not" if "should not" in reason_text else "shouldn't")
+            if len(parts) > 1:
+                concern = parts[1].strip().split(".")[0].strip()[:50]
+                if concern:
+                    patterns.append(f"avoid: {concern}")
+
+        return patterns
+
+    def _load_learned_patterns(self) -> None:
+        """Load previously learned patterns from storage."""
+        patterns_file = self.learning_storage_dir / "learned_patterns.json"
+
+        if not patterns_file.exists():
+            logger.info("No existing learned patterns found, starting fresh")
+            return
+
+        try:
+            with open(patterns_file, 'r') as f:
+                data = json.load(f)
+
+                self.learned_thresholds = defaultdict(lambda: 1.0, data.get("learned_thresholds", {}))
+                self.problematic_patterns = data.get("problematic_patterns", [])
+
+                # Restore stats (convert Counter data back to Counter)
+                stats_data = data.get("override_stats", {})
+                self.override_stats = {
+                    "total_overrides": stats_data.get("total_overrides", 0),
+                    "by_reason_category": Counter(stats_data.get("by_reason_category", {})),
+                    "by_action_type": Counter(stats_data.get("by_action_type", {})),
+                    "recent_patterns": stats_data.get("recent_patterns", [])
+                }
+
+                logger.info(
+                    f"Loaded learned patterns: {len(self.learned_thresholds)} thresholds, "
+                    f"{len(self.problematic_patterns)} problematic patterns, "
+                    f"{self.override_stats['total_overrides']} historical overrides"
+                )
+        except Exception as e:
+            logger.error(f"Failed to load learned patterns: {e}")
+
+    def _persist_learned_patterns(self) -> None:
+        """Persist learned patterns to storage."""
+        patterns_file = self.learning_storage_dir / "learned_patterns.json"
+
+        try:
+            data = {
+                "learned_thresholds": dict(self.learned_thresholds),
+                "problematic_patterns": self.problematic_patterns,
+                "override_stats": {
+                    "total_overrides": self.override_stats["total_overrides"],
+                    "by_reason_category": dict(self.override_stats["by_reason_category"]),
+                    "by_action_type": dict(self.override_stats["by_action_type"]),
+                    "recent_patterns": self.override_stats["recent_patterns"]
+                },
+                "last_updated": datetime.now().isoformat()
+            }
+
+            with open(patterns_file, 'w') as f:
+                json.dump(data, f, indent=2)
+
+            logger.debug(f"Persisted learned patterns to {patterns_file}")
+        except Exception as e:
+            logger.error(f"Failed to persist learned patterns: {e}")
+
+    def apply_learned_adjustments(self, action_type: str, base_threshold: float) -> float:
+        """
+        Apply learned adjustments to a threshold based on override history.
+
+        Args:
+            action_type: Type of action being evaluated
+            base_threshold: Base threshold value
+
+        Returns:
+            Adjusted threshold value
+        """
+        adjustment_factor = self.learned_thresholds.get(action_type, 1.0)
+        adjusted = base_threshold * adjustment_factor
+
+        if adjustment_factor != 1.0:
+            logger.debug(
+                f"Applied learned adjustment for '{action_type}': "
+                f"{base_threshold:.3f} * {adjustment_factor:.3f} = {adjusted:.3f}"
+            )
+
+        return adjusted
+
+    def check_problematic_patterns(self, action_text: str) -> List[str]:
+        """
+        Check if action contains known problematic patterns.
+
+        Args:
+            action_text: Action text to check
+
+        Returns:
+            List of matched problematic patterns
+        """
+        matched_patterns = []
+        action_lower = action_text.lower()
+
+        for pattern in self.problematic_patterns:
+            if pattern in action_lower:
+                matched_patterns.append(pattern)
+
+        if matched_patterns:
+            logger.warning(
+                f"Action contains {len(matched_patterns)} known problematic patterns: "
+                f"{matched_patterns}"
+            )
+
+        return matched_patterns
 
     def get_dashboard_metrics(self) -> Dict[str, Any]:
         """

@@ -21,7 +21,9 @@ from enum import Enum
 import json
 from pathlib import Path
 import re
+import os
 
+import httpx
 from loguru import logger
 
 
@@ -141,7 +143,8 @@ class EDMMonitor:
         storage_dir: Path,
         fact_check_enabled: bool = True,
         auto_resolve_verified: bool = True,
-        max_unresolved_debt: int = 50
+        max_unresolved_debt: int = 50,
+        google_fact_check_api_key: Optional[str] = None
     ):
         """
         Initialize EDM Monitor
@@ -151,6 +154,7 @@ class EDMMonitor:
             fact_check_enabled: Enable automatic fact-checking
             auto_resolve_verified: Auto-resolve verified claims
             max_unresolved_debt: Alert if unresolved debt exceeds this
+            google_fact_check_api_key: Google Fact Check Tools API key
         """
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
@@ -158,6 +162,9 @@ class EDMMonitor:
         self.fact_check_enabled = fact_check_enabled
         self.auto_resolve_verified = auto_resolve_verified
         self.max_unresolved_debt = max_unresolved_debt
+
+        # API configuration
+        self.google_fact_check_api_key = google_fact_check_api_key or os.getenv("GOOGLE_FACT_CHECK_API_KEY")
 
         # In-memory cache
         self.debt_instances: Dict[str, EpistemicDebtSnapshot] = {}
@@ -169,7 +176,8 @@ class EDMMonitor:
         logger.info(
             f"EDM Monitor initialized with storage at {storage_dir}, "
             f"fact-checking: {fact_check_enabled}, "
-            f"max unresolved: {max_unresolved_debt}"
+            f"max unresolved: {max_unresolved_debt}, "
+            f"Google API configured: {bool(self.google_fact_check_api_key)}"
         )
 
     def _load_debt_instances(self) -> None:
@@ -355,40 +363,193 @@ class EDMMonitor:
 
     async def _fact_check_claim(self, debt: EpistemicDebtSnapshot) -> None:
         """
-        Perform fact-checking on a claim
+        Perform fact-checking on a claim using multiple sources:
+        1. Google Fact Check Tools API (if API key available)
+        2. Wikipedia API for basic verification
+        3. Heuristic fallback for pattern matching
 
-        In production, this would integrate with fact-checking APIs like:
-        - Google Fact Check Tools API
-        - ClaimReview structured data
-        - Academic databases
-        - Trusted sources
-
-        For now, this is a placeholder that simulates fact-checking.
+        Integrates with real fact-checking services.
         """
         logger.info(f"Fact-checking claim: {debt.claim[:100]}...")
 
-        # TODO: Integrate with actual fact-checking API
-        # For now, simulate with heuristics
+        # Try Google Fact Check Tools API first
+        if self.google_fact_check_api_key:
+            try:
+                result = await self._check_google_fact_check_api(debt.claim)
+                if result:
+                    debt.fact_check_status = result["status"]
+                    debt.fact_check_source = result["source"]
+                    debt.fact_check_evidence = result["evidence"]
+                    debt.fact_check_confidence = result["confidence"]
+                    await self._persist_debt(debt)
 
-        await asyncio.sleep(0.1)  # Simulate API call
+                    if self.auto_resolve_verified and debt.fact_check_status == FactCheckStatus.VERIFIED:
+                        await self.resolve_debt(debt.debt_id, "auto_verified")
+                    return
+            except Exception as e:
+                logger.warning(f"Google Fact Check API failed: {e}, trying fallback methods")
 
-        # Placeholder logic - in production, use real fact-checking
-        if "studies show" in debt.claim.lower():
-            debt.fact_check_status = FactCheckStatus.UNVERIFIABLE
-            debt.fact_check_confidence = 0.3
-            debt.fact_check_evidence = "Claim requires specific citation to verify"
+        # Try Wikipedia API as fallback
+        try:
+            result = await self._check_wikipedia_api(debt.claim)
+            if result:
+                debt.fact_check_status = result["status"]
+                debt.fact_check_source = result["source"]
+                debt.fact_check_evidence = result["evidence"]
+                debt.fact_check_confidence = result["confidence"]
+                await self._persist_debt(debt)
 
-        elif any(word in debt.claim.lower() for word in ["everyone", "no one", "always", "never"]):
-            debt.fact_check_status = FactCheckStatus.DISPUTED
-            debt.fact_check_confidence = 0.6
-            debt.fact_check_evidence = "Absolute claims are rarely accurate"
+                if self.auto_resolve_verified and debt.fact_check_status == FactCheckStatus.VERIFIED:
+                    await self.resolve_debt(debt.debt_id, "auto_verified")
+                return
+        except Exception as e:
+            logger.warning(f"Wikipedia API failed: {e}, using heuristic fallback")
 
-        # Update storage
+        # Fallback to heuristic analysis
+        await self._heuristic_fact_check(debt)
         await self._persist_debt(debt)
 
         # Auto-resolve if verified and enabled
         if self.auto_resolve_verified and debt.fact_check_status == FactCheckStatus.VERIFIED:
             await self.resolve_debt(debt.debt_id, "auto_verified")
+
+    async def _check_google_fact_check_api(self, claim: str) -> Optional[Dict]:
+        """
+        Check claim using Google Fact Check Tools API
+
+        Returns dict with status, source, evidence, confidence or None
+        """
+        url = "https://factchecktools.googleapis.com/v1alpha1/claims:search"
+        params = {
+            "query": claim,
+            "key": self.google_fact_check_api_key,
+            "languageCode": "en"
+        }
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+            if not data.get("claims"):
+                return None
+
+            # Get the first claim review
+            claim_review = data["claims"][0]
+            reviews = claim_review.get("claimReview", [])
+
+            if not reviews:
+                return None
+
+            # Analyze the review rating
+            review = reviews[0]
+            rating = review.get("textualRating", "").lower()
+
+            # Map rating to our status
+            if any(word in rating for word in ["true", "correct", "accurate"]):
+                status = FactCheckStatus.VERIFIED
+                confidence = 0.9
+            elif any(word in rating for word in ["false", "incorrect", "inaccurate"]):
+                status = FactCheckStatus.FALSE
+                confidence = 0.9
+            elif any(word in rating for word in ["disputed", "mixed", "partly"]):
+                status = FactCheckStatus.DISPUTED
+                confidence = 0.7
+            else:
+                status = FactCheckStatus.UNVERIFIABLE
+                confidence = 0.5
+
+            return {
+                "status": status,
+                "source": f"Google Fact Check - {review.get('publisher', {}).get('name', 'Unknown')}",
+                "evidence": f"{rating}: {review.get('text', 'No details available')}",
+                "confidence": confidence
+            }
+
+    async def _check_wikipedia_api(self, claim: str) -> Optional[Dict]:
+        """
+        Check claim against Wikipedia for basic verification
+
+        Returns dict with status, source, evidence, confidence or None
+        """
+        # Extract key terms from claim for search
+        search_terms = " ".join([
+            word for word in claim.split()
+            if len(word) > 4 and word.lower() not in ["that", "this", "with", "from"]
+        ][:5])
+
+        if not search_terms:
+            return None
+
+        # Search Wikipedia
+        search_url = "https://en.wikipedia.org/w/api.php"
+        search_params = {
+            "action": "opensearch",
+            "search": search_terms,
+            "limit": 3,
+            "format": "json"
+        }
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(search_url, params=search_params)
+            response.raise_for_status()
+            data = response.json()
+
+            if len(data) < 4 or not data[1]:
+                return None
+
+            # Get the first result's description
+            title = data[1][0]
+            description = data[2][0] if data[2] else ""
+            url = data[3][0] if data[3] else ""
+
+            # Simple relevance check
+            claim_lower = claim.lower()
+            if any(term.lower() in claim_lower for term in title.split()):
+                return {
+                    "status": FactCheckStatus.VERIFIED,
+                    "source": f"Wikipedia - {title}",
+                    "evidence": f"Found relevant article: {description[:200]}... (See: {url})",
+                    "confidence": 0.6
+                }
+
+            return {
+                "status": FactCheckStatus.UNVERIFIABLE,
+                "source": "Wikipedia",
+                "evidence": "No directly relevant Wikipedia articles found",
+                "confidence": 0.4
+            }
+
+    async def _heuristic_fact_check(self, debt: EpistemicDebtSnapshot) -> None:
+        """
+        Heuristic-based fact checking using pattern matching
+        """
+        claim_lower = debt.claim.lower()
+
+        # Check for vague citations
+        if "studies show" in claim_lower or "research indicates" in claim_lower:
+            debt.fact_check_status = FactCheckStatus.UNVERIFIABLE
+            debt.fact_check_confidence = 0.3
+            debt.fact_check_evidence = "Claim requires specific citation to verify"
+
+        # Check for absolute statements
+        elif any(word in claim_lower for word in ["everyone", "no one", "always", "never"]):
+            debt.fact_check_status = FactCheckStatus.DISPUTED
+            debt.fact_check_confidence = 0.6
+            debt.fact_check_evidence = "Absolute claims are rarely accurate without qualification"
+
+        # Check for weasel words
+        elif any(pattern.replace(r"\b", "").replace(r"\\", "") in claim_lower
+                 for pattern in self.VAGUE_PATTERNS):
+            debt.fact_check_status = FactCheckStatus.UNVERIFIABLE
+            debt.fact_check_confidence = 0.4
+            debt.fact_check_evidence = "Vague attribution reduces verifiability"
+
+        # Default: pending further review
+        else:
+            debt.fact_check_status = FactCheckStatus.PENDING
+            debt.fact_check_confidence = 0.5
+            debt.fact_check_evidence = "Requires manual verification or additional context"
 
     async def resolve_debt(
         self,
