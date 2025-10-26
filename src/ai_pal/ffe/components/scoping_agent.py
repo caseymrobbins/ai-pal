@@ -168,9 +168,8 @@ Be specific and actionable. The critical path should be narrower than the origin
 
         # Execute with AI
         requirements = TaskRequirements(
+            task_type="analysis",
             complexity=TaskComplexity.SIMPLE,
-            min_reasoning_capability=0.7,
-            max_cost_per_1k_tokens=0.005,
             max_latency_ms=3000,
         )
 
@@ -185,7 +184,7 @@ Be specific and actionable. The critical path should be narrower than the origin
         )
 
         # Parse AI response
-        text = response.text
+        text = response.generated_text
         critical_path = ""
         value_score = 0.8
         effort_score = 0.2

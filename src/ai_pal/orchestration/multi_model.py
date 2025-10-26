@@ -660,7 +660,6 @@ class MultiModelOrchestrator:
         # Initialize provider on demand
         if provider == ModelProvider.LOCAL:
             self.providers[provider] = LocalLLMProvider()
-            await self.providers[provider].initialize()
         elif provider == ModelProvider.OPENAI:
             self.providers[provider] = OpenAIProvider()
         elif provider == ModelProvider.ANTHROPIC:
@@ -715,7 +714,7 @@ class MultiModelOrchestrator:
 
             # Generate response
             logger.info(f"Executing {provider.value}:{model_name}")
-            response = await provider_instance.generate(request)
+            response = await provider_instance.generate(request, model_name)
 
             # Record performance
             latency_ms = (datetime.now() - start_time).total_seconds() * 1000
@@ -792,7 +791,7 @@ class MultiModelOrchestrator:
         )
 
         # Yield complete response
-        yield response.text
+        yield response.generated_text
 
     async def record_performance(
         self,
