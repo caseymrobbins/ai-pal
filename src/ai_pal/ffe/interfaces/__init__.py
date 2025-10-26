@@ -16,12 +16,35 @@ Priority 2 Interfaces (Enhanced Engagement):
 
 Priority 3 Interfaces (Social Expansion):
 - Social Relatedness: Win sharing with groups
+
+Priority 4 Interfaces (ARI Measurement):
+- Learn About Me: Socratic dialogue for deep skill profiling
+- Socratic Co-pilot: Embedded capability assessment during assistance
 """
 
 from .progress_tapestry import ProgressTapestry, TapestryView
 from .strength_interface import StrengthInterface
 from .teaching_interface import TeachingInterface, TeachingPrompt
 from .curiosity_compass import CuriosityCompass, CuriosityMap, ExplorationOpportunity
+from .learn_about_me import (
+    LearnAboutMeInterface,
+    DeepDiveSession,
+    SocraticQuestion,
+    SocraticResponse,
+    SynthesisRubric,
+    KnowledgeProfile,
+    DifficultyLevel,
+    ResponseQuality,
+)
+from .socratic_copilot import (
+    SocraticCopilotInterface,
+    CopilotRequest,
+    CopilotProbe,
+    UnassistedCapabilityCheckpoint,
+    CheckpointResponseData,
+    CheckpointType,
+    CheckpointResponse,
+)
 
 __all__ = [
     "ProgressTapestry",
@@ -32,4 +55,19 @@ __all__ = [
     "CuriosityCompass",
     "CuriosityMap",
     "ExplorationOpportunity",
+    "LearnAboutMeInterface",
+    "DeepDiveSession",
+    "SocraticQuestion",
+    "SocraticResponse",
+    "SynthesisRubric",
+    "KnowledgeProfile",
+    "DifficultyLevel",
+    "ResponseQuality",
+    "SocraticCopilotInterface",
+    "CopilotRequest",
+    "CopilotProbe",
+    "UnassistedCapabilityCheckpoint",
+    "CheckpointResponseData",
+    "CheckpointType",
+    "CheckpointResponse",
 ]
