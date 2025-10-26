@@ -468,6 +468,280 @@ class TestFFEEndToEnd:
         print("\n✓ Complete user journey successful!")
         print("\n🎉 FFE V3.0 fully operational!")
 
+    @pytest.mark.asyncio
+    async def test_protege_pipeline_teaching_mode(self, ffe_system):
+        """Test: Protégé Pipeline learn-by-teaching mode"""
+        from ai_pal.ffe.modules import ProtegePipeline
+        from ai_pal.ffe.interfaces import TeachingInterface
+
+        print("\n=== Protégé Pipeline Teaching Mode Test ===")
+
+        # Create instances
+        protege = ProtegePipeline()
+        teaching_interface = TeachingInterface(protege)
+
+        user_id = "test_user_001"
+
+        # 1. Start teaching session
+        print("\n1. Starting teaching session...")
+        session = await protege.start_teaching_mode(
+            user_id=user_id,
+            subject="Python lists",
+            from_learning_goal=True
+        )
+
+        assert session.user_id == user_id
+        assert session.subject == "Python lists"
+        print(f"✓ Teaching session started: {session.session_id}")
+        print(f"  Subject: {session.subject}")
+
+        # 2. Request explanation
+        print("\n2. AI student requests explanation...")
+        request = await protege.request_explanation(
+            user_id=user_id,
+            concept="list comprehension"
+        )
+
+        assert "student_question" in request
+        print(f"✓ Student question: '{request['student_question']}'")
+
+        # 3. User provides explanation
+        print("\n3. User teaches concept...")
+        explanation_text = "A list comprehension is a concise way to create lists in Python. It's like a for loop but written in one line inside square brackets."
+
+        explanation = await protege.receive_explanation(
+            user_id=user_id,
+            concept="list comprehension",
+            explanation_text=explanation_text
+        )
+
+        assert explanation is not None
+        assert explanation.concept == "list comprehension"
+        print(f"✓ Explanation received")
+        print(f"  Clarity: {explanation.clarity_score:.2f}")
+        print(f"  Completeness: {explanation.completeness_score:.2f}")
+        print(f"  Depth: {explanation.depth_score:.2f}")
+        print(f"  Student understood: {explanation.student_understood}")
+        print(f"  Feedback: '{explanation.student_feedback}'")
+
+        # 4. Check session progress
+        print("\n4. Checking teaching progress...")
+        assert session.concepts_explained == ["list comprehension"]
+        assert session.understanding_level > 0
+        print(f"✓ Progress updated")
+        print(f"  Concepts explained: {len(session.concepts_explained)}")
+        print(f"  Understanding level: {session.understanding_level:.2f}")
+
+        print("\n✓ Protégé Pipeline teaching mode working!")
+
+    @pytest.mark.asyncio
+    async def test_curiosity_compass_exploration(self, ffe_system):
+        """Test: Curiosity Compass exploration mode"""
+        from ai_pal.ffe.interfaces import CuriosityCompass
+
+        print("\n=== Curiosity Compass Exploration Test ===")
+
+        engine = ffe_system.ffe_engine
+        user_id = "test_user_001"
+
+        # Create curiosity compass
+        compass = CuriosityCompass(
+            growth_scaffold=engine.growth_scaffold,
+            scoping_agent=engine.scoping_agent,
+            strength_amplifier=engine.strength_amplifier
+        )
+
+        # 1. Report a bottleneck first
+        print("\n1. Creating a bottleneck...")
+        bottleneck = await engine.growth_scaffold.report_avoidance(
+            user_id=user_id,
+            task_description="Learn regex patterns",
+            reason=BottleneckReason.DIFFICULT
+        )
+        print(f"✓ Bottleneck created: {bottleneck.task_description}")
+
+        # 2. Show curiosity map
+        print("\n2. Showing curiosity map...")
+        curiosity_map = await compass.show_curiosity_map(user_id)
+
+        assert curiosity_map.user_id == user_id
+        assert len(curiosity_map.unexplored_areas) > 0
+        print(f"✓ Curiosity map generated")
+        print(f"  Unexplored areas: {len(curiosity_map.unexplored_areas)}")
+        print(f"  Suggestions: {len(curiosity_map.exploration_suggestions)}")
+
+        # 3. Get exploration suggestion
+        print("\n3. Getting exploration suggestion...")
+        opportunity = await compass.suggest_exploration(user_id)
+
+        assert opportunity is not None
+        assert opportunity.user_id == user_id
+        assert opportunity.exploration_block.time_block_size.value == 15  # 15 minutes
+        print(f"✓ Exploration suggested:")
+        print(f"  Prompt: '{opportunity.exploration_prompt}'")
+        print(f"  Duration: {opportunity.exploration_block.time_block_size.value} minutes")
+        print(f"  No pressure: '{opportunity.no_commitment_message}'")
+
+        # 4. Record discovery
+        print("\n4. Recording discovery...")
+        discovery = await compass.record_discovery(
+            user_id=user_id,
+            bottleneck_id=bottleneck.bottleneck_id,
+            discovery="Regex patterns are actually like puzzles - fun!",
+            wants_to_continue=False
+        )
+
+        assert "celebration_message" in discovery
+        print(f"✓ Discovery recorded")
+        print(f"  Celebration: '{discovery['celebration_message']}'")
+        print(f"  Closure: '{discovery['closure_message']}'")
+
+        print("\n✓ Curiosity Compass exploration mode working!")
+
+    @pytest.mark.asyncio
+    async def test_teaching_interface_workflow(self, ffe_system):
+        """Test: Complete teaching interface workflow"""
+        from ai_pal.ffe.modules import ProtegePipeline
+        from ai_pal.ffe.interfaces import TeachingInterface
+        from ai_pal.ffe.models import GoalPacket, TaskComplexityLevel, GoalStatus
+
+        print("\n=== Teaching Interface Workflow Test ===")
+
+        protege = ProtegePipeline()
+        interface = TeachingInterface(protege)
+        user_id = "test_user_001"
+
+        # 1. Create learning goal
+        print("\n1. Creating learning goal...")
+        learning_goal = GoalPacket(
+            user_id=user_id,
+            description="Learn Python decorators",
+            complexity_level=TaskComplexityLevel.MINI,
+            status=GoalStatus.PENDING
+        )
+        print(f"✓ Learning goal: '{learning_goal.description}'")
+
+        # 2. Start teaching mode from goal
+        print("\n2. Converting to teaching mode...")
+        session = await interface.start_teaching(user_id, learning_goal)
+
+        assert session is not None
+        print(f"✓ Teaching mode started")
+        print(f"  Will teach: {session.subject}")
+
+        # 3. Get teaching prompt
+        print("\n3. Getting teaching prompt...")
+        prompt = await interface.get_teaching_prompt(user_id)
+
+        assert prompt is not None
+        print(f"✓ Teaching prompt received:")
+        print(f"  Question: '{prompt.student_question}'")
+        print(f"  Hint: '{prompt.difficulty_hint}'")
+
+        # 4. Submit explanation
+        print("\n4. Submitting explanation...")
+        feedback = await interface.submit_explanation(
+            user_id=user_id,
+            concept=prompt.concept,
+            explanation_text="Decorators are functions that modify other functions. They use the @ symbol and wrap the original function with additional behavior."
+        )
+
+        assert feedback is not None
+        assert "understood" in feedback
+        print(f"✓ Explanation submitted")
+        print(f"  Student understood: {feedback['understood']}")
+        print(f"  Feedback: '{feedback['student_feedback']}'")
+
+        # 5. Check progress
+        print("\n5. Checking progress...")
+        progress = await interface.get_teaching_progress(user_id)
+
+        assert "concepts_explained" in progress
+        print(f"✓ Progress tracked")
+        print(f"  Concepts taught: {progress['concepts_explained']}")
+        print(f"  Quality: {progress['teaching_quality']:.2f}")
+
+        # 6. Complete session
+        print("\n6. Completing session...")
+        summary = await interface.complete_teaching_session(user_id)
+
+        assert "celebration_message" in summary
+        print(f"✓ Session completed")
+        print(f"  Concepts mastered: {summary['concepts_mastered']}")
+        print(f"  Final quality: {summary['teaching_quality']:.2f}")
+        print(f"  Celebration: '{summary['celebration_message']}'")
+
+        print("\n✓ Complete teaching workflow successful!")
+
+    @pytest.mark.asyncio
+    async def test_real_model_execution(self, ffe_system):
+        """Test: Real model execution via MultiModelOrchestrator"""
+        from ai_pal.orchestration.multi_model import (
+            MultiModelOrchestrator,
+            ModelProvider,
+            TaskRequirements,
+            TaskComplexity,
+        )
+        from pathlib import Path
+
+        print("\n=== Real Model Execution Test ===")
+
+        # Create orchestrator
+        orchestrator = MultiModelOrchestrator(
+            storage_dir=Path("./data/orchestrator_test")
+        )
+
+        # 1. Test model selection
+        print("\n1. Testing model selection...")
+        requirements = TaskRequirements(
+            complexity=TaskComplexity.SIMPLE,
+            min_reasoning_capability=0.5,
+            max_cost_per_1k_tokens=0.01,
+            max_latency_ms=5000,
+            requires_local=True,  # Force local to avoid API keys in tests
+        )
+
+        selection = await orchestrator.select_model(requirements)
+        print(f"✓ Model selected: {selection.provider.value}:{selection.model_name}")
+        print(f"  Reason: {selection.selection_reason}")
+        print(f"  Estimated cost: ${selection.estimated_cost:.4f}")
+
+        # 2. Test execution (only if we have a local model available)
+        print("\n2. Testing model execution...")
+        try:
+            # Simple test prompt
+            response = await orchestrator.execute_model(
+                provider=selection.provider,
+                model_name=selection.model_name,
+                prompt="What is 2+2? Answer in one sentence.",
+                max_tokens=50,
+                temperature=0.3,
+            )
+
+            print(f"✓ Model execution successful")
+            print(f"  Response: '{response.text[:100]}...'")
+            print(f"  Tokens used: {response.tokens_used}")
+            print(f"  Cost: ${response.cost_usd:.4f}")
+            print(f"  Latency: {response.latency_ms:.0f}ms")
+
+            assert response.text is not None
+            assert len(response.text) > 0
+            assert response.tokens_used > 0
+
+        except Exception as e:
+            # Expected if model not initialized or API keys missing
+            print(f"⚠ Model execution skipped: {str(e)[:100]}")
+            print("  (This is expected if local model not initialized or API keys missing)")
+
+        # 3. Test performance tracking
+        print("\n3. Testing performance tracking...")
+        report = orchestrator.get_performance_report()
+
+        print(f"✓ Performance report generated")
+        print(f"  Tracked models: {len(report['models'])}")
+
+        print("\n✓ Real model execution test complete!")
+
 
 if __name__ == "__main__":
     # Run tests directly

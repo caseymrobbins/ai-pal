@@ -3,11 +3,16 @@ Scoping Agent Component
 
 The "master planner" - recursively breaks down goals using the 80/20 principle
 until reaching atomic blocks.
+
+AI-Powered Features:
+- Uses LLM to analyze goals and identify critical path
+- Sophisticated 80/20 value-effort analysis
+- Falls back to templates if AI unavailable
 """
 
 import uuid
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from loguru import logger
 
 from ..interfaces import IScopingAgent
@@ -37,10 +42,21 @@ class ScopingAgent(IScopingAgent):
         "default": ["research & plan", "execute core work", "review & improve"],
     }
 
-    def __init__(self):
-        """Initialize Scoping Agent"""
+    def __init__(self, orchestrator=None):
+        """
+        Initialize Scoping Agent
+
+        Args:
+            orchestrator: Optional MultiModelOrchestrator for AI-powered scoping
+                         Falls back to templates if None
+        """
+        self.orchestrator = orchestrator
         self.scoping_sessions = {}  # session_id -> ScopingSession
-        logger.info("Scoping Agent initialized")
+
+        if orchestrator:
+            logger.info("Scoping Agent initialized with AI-powered analysis")
+        else:
+            logger.info("Scoping Agent initialized with template-based analysis")
 
     async def scope_goal(
         self,
@@ -103,7 +119,8 @@ class ScopingAgent(IScopingAgent):
         """
         Identify the 20% of effort that delivers 80% of value
 
-        Uses pattern matching and heuristics to identify the critical path.
+        Uses AI (if available) to analyze goal and identify critical path.
+        Falls back to pattern matching if AI unavailable.
 
         Args:
             goal: Goal to analyze
@@ -113,6 +130,100 @@ class ScopingAgent(IScopingAgent):
         """
         logger.debug(f"Identifying 80% win for goal: '{goal.description[:50]}...'")
 
+        # Try AI-powered analysis first
+        if self.orchestrator:
+            try:
+                result = await self._identify_80_win_ai(goal)
+                logger.debug(f"AI-identified 80% win: '{result['description'][:60]}...'")
+                return result
+            except Exception as e:
+                logger.warning(f"AI scoping failed, falling back to templates: {e}")
+
+        # Fallback to template-based analysis
+        return await self._identify_80_win_template(goal)
+
+    async def _identify_80_win_ai(self, goal: GoalPacket) -> Dict[str, Any]:
+        """AI-powered 80/20 analysis"""
+        from ai_pal.orchestration.multi_model import (
+            ModelProvider,
+            TaskRequirements,
+            TaskComplexity,
+        )
+
+        # Build prompt for 80/20 analysis
+        prompt = f"""Analyze this goal using the 80/20 principle (Pareto Principle).
+
+Goal: "{goal.description}"
+Current complexity: {goal.complexity_level.value}
+
+Identify the ONE critical path - the 20% of effort that will deliver 80% of value.
+
+Provide your analysis in this EXACT format:
+CRITICAL_PATH: [One concise sentence describing the 80% win]
+VALUE_SCORE: [0.0-1.0, how much value this delivers]
+EFFORT_SCORE: [0.0-1.0, how much effort this requires]
+REASONING: [One sentence explaining why this is the critical path]
+
+Be specific and actionable. The critical path should be narrower than the original goal."""
+
+        # Execute with AI
+        requirements = TaskRequirements(
+            complexity=TaskComplexity.SIMPLE,
+            min_reasoning_capability=0.7,
+            max_cost_per_1k_tokens=0.005,
+            max_latency_ms=3000,
+        )
+
+        selection = await self.orchestrator.select_model(requirements)
+
+        response = await self.orchestrator.execute_model(
+            provider=selection.provider,
+            model_name=selection.model_name,
+            prompt=prompt,
+            temperature=0.3,  # Lower temperature for analytical tasks
+            max_tokens=200,
+        )
+
+        # Parse AI response
+        text = response.text
+        critical_path = ""
+        value_score = 0.8
+        effort_score = 0.2
+        reasoning = ""
+
+        for line in text.split('\n'):
+            line = line.strip()
+            if line.startswith('CRITICAL_PATH:'):
+                critical_path = line.replace('CRITICAL_PATH:', '').strip()
+            elif line.startswith('VALUE_SCORE:'):
+                try:
+                    value_score = float(line.replace('VALUE_SCORE:', '').strip())
+                except:
+                    value_score = 0.8
+            elif line.startswith('EFFORT_SCORE:'):
+                try:
+                    effort_score = float(line.replace('EFFORT_SCORE:', '').strip())
+                except:
+                    effort_score = 0.2
+            elif line.startswith('REASONING:'):
+                reasoning = line.replace('REASONING:', '').strip()
+
+        if not critical_path:
+            raise ValueError("AI did not provide critical path")
+
+        ratio = value_score / effort_score if effort_score > 0 else 4.0
+
+        return {
+            'description': critical_path,
+            'value_score': value_score,
+            'effort_score': effort_score,
+            'ratio': ratio,
+            'pattern_used': 'ai_analysis',
+            'ai_reasoning': reasoning,
+        }
+
+    async def _identify_80_win_template(self, goal: GoalPacket) -> Dict[str, Any]:
+        """Template-based 80/20 analysis (fallback)"""
         # Detect pattern in goal description
         description_lower = goal.description.lower()
         pattern = "default"
@@ -135,7 +246,6 @@ class ScopingAgent(IScopingAgent):
             eighty_win_desc = f"{critical_step.capitalize()}: {goal.description}"
 
         # Calculate scores (simplified heuristics)
-        # The 80% win should have high value, moderate effort
         value_score = 0.8  # Delivers 80% of value
         effort_score = 0.2  # Requires only 20% of effort
         ratio = value_score / effort_score if effort_score > 0 else 0
@@ -148,7 +258,7 @@ class ScopingAgent(IScopingAgent):
             'pattern_used': pattern
         }
 
-        logger.debug(f"Identified 80% win: '{eighty_win_desc}' (ratio: {ratio:.2f})")
+        logger.debug(f"Template-identified 80% win: '{eighty_win_desc}' (ratio: {ratio:.2f})")
 
         return result
 

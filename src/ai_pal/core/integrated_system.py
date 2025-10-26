@@ -431,9 +431,54 @@ class IntegratedACSystem:
 
             # Stage 5: Execution
             result.stage_completed = RequestStage.EXECUTION
-            # Note: Actual model execution would happen here
-            # For now, simulating with placeholder
-            result.model_response = f"[Response from {result.selected_model} to: {result.processed_query[:50]}...]"
+
+            # Execute model using orchestrator
+            if self.orchestrator:
+                try:
+                    logger.info(
+                        f"Executing model: {result.selected_provider.value}:{result.selected_model}"
+                    )
+
+                    # Build context from memories
+                    context = ""
+                    if result.relevant_memories:
+                        context = "Relevant context:\n"
+                        for memory in result.relevant_memories[:3]:  # Top 3 memories
+                            context += f"- {memory.get('content', '')}\n"
+                        context += "\n"
+
+                    # Build system prompt
+                    system_prompt = (
+                        "You are a helpful AI assistant. Be concise and accurate.\n\n"
+                        + context
+                    )
+
+                    # Execute
+                    llm_response = await self.orchestrator.execute_model(
+                        provider=result.selected_provider,
+                        model_name=result.selected_model,
+                        prompt=result.processed_query,
+                        system_prompt=system_prompt,
+                        max_tokens=1000,
+                        temperature=0.7,
+                    )
+
+                    result.model_response = llm_response.text
+                    result.cost = llm_response.cost_usd
+                    result.latency_ms = llm_response.latency_ms
+
+                    logger.info(
+                        f"Model execution complete: {llm_response.tokens_used} tokens, "
+                        f"${llm_response.cost_usd:.4f}, {llm_response.latency_ms:.0f}ms"
+                    )
+
+                except Exception as e:
+                    logger.error(f"Model execution failed: {e}")
+                    result.error = f"Model execution failed: {str(e)}"
+                    result.model_response = f"Error: {str(e)}"
+            else:
+                # Fallback if orchestrator not available
+                result.model_response = f"[Response from {result.selected_model} to: {result.processed_query[:50]}...]"
 
             # Stage 6: Monitoring
             result.stage_completed = RequestStage.MONITORING

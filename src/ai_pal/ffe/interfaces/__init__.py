@@ -20,9 +20,16 @@ Priority 3 Interfaces (Social Expansion):
 
 from .progress_tapestry import ProgressTapestry, TapestryView
 from .strength_interface import StrengthInterface
+from .teaching_interface import TeachingInterface, TeachingPrompt
+from .curiosity_compass import CuriosityCompass, CuriosityMap, ExplorationOpportunity
 
 __all__ = [
     "ProgressTapestry",
     "TapestryView",
     "StrengthInterface",
+    "TeachingInterface",
+    "TeachingPrompt",
+    "CuriosityCompass",
+    "CuriosityMap",
+    "ExplorationOpportunity",
 ]

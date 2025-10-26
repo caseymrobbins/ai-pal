@@ -10,8 +10,12 @@ Modules:
 """
 
 from .epic_meaning import EpicMeaningModule, NarrativeArc
+from .protege_pipeline import ProtegePipeline, TeachingSession, Explanation
 
 __all__ = [
     "EpicMeaningModule",
     "NarrativeArc",
+    "ProtegePipeline",
+    "TeachingSession",
+    "Explanation",
 ]
