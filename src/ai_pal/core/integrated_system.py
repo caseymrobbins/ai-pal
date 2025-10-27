@@ -463,12 +463,12 @@ class IntegratedACSystem:
                         temperature=0.7,
                     )
 
-                    result.model_response = llm_response.text
+                    result.model_response = llm_response.generated_text
                     result.cost = llm_response.cost_usd
                     result.latency_ms = llm_response.latency_ms
 
                     logger.info(
-                        f"Model execution complete: {llm_response.tokens_used} tokens, "
+                        f"Model execution complete: {llm_response.total_tokens} tokens, "
                         f"${llm_response.cost_usd:.4f}, {llm_response.latency_ms:.0f}ms"
                     )
 
