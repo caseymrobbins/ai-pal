@@ -63,6 +63,7 @@ class FractalFlowEngine:
         personality_connector: Optional[PersonalityModuleConnector] = None,
         ari_connector: Optional[ARIConnector] = None,
         dashboard_connector: Optional[DashboardConnector] = None,
+        orchestrator=None,
     ):
         """
         Initialize Fractal Flow Engine
@@ -72,16 +73,23 @@ class FractalFlowEngine:
             personality_connector: Connector to Personality Module (Phase 3)
             ari_connector: Connector to ARI Monitor (Phase 2)
             dashboard_connector: Connector to Agency Dashboard (Phase 3)
+            orchestrator: Optional MultiModelOrchestrator for AI-powered components
+                         If provided, enables AI-powered:
+                         - Scoping Agent (80/20 analysis)
+                         - Strength Amplifier (task reframing)
+                         - Reward Emitter (personalized rewards)
+                         Falls back to templates if None
         """
         self.storage_dir = storage_dir or Path("./data/ffe")
         self.storage_dir.mkdir(parents=True, exist_ok=True)
+        self.orchestrator = orchestrator
 
-        # Initialize core components
+        # Initialize core components (with AI support if orchestrator provided)
         self.goal_ingestor = GoalIngestor()
-        self.reward_emitter = RewardEmitter()
+        self.reward_emitter = RewardEmitter(orchestrator=orchestrator)
         self.time_block_manager = TimeBlockManager()
-        self.scoping_agent = ScopingAgent()
-        self.strength_amplifier = StrengthAmplifier()
+        self.scoping_agent = ScopingAgent(orchestrator=orchestrator)
+        self.strength_amplifier = StrengthAmplifier(orchestrator=orchestrator)
         self.growth_scaffold = GrowthScaffold()
         self.momentum_orchestrator = MomentumLoopOrchestrator()
 

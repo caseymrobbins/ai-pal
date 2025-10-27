@@ -246,12 +246,13 @@ class IntegratedACSystem:
                 else None
             )
 
-            # Initialize FFE with connectors
+            # Initialize FFE with connectors and orchestrator for AI-powered components
             self.ffe_engine = FractalFlowEngine(
                 storage_dir=config.data_dir / "ffe",
                 personality_connector=personality_connector,
                 ari_connector=ari_connector,
                 dashboard_connector=dashboard_connector,
+                orchestrator=self.orchestrator,  # Enable AI-powered FFE components
             )
 
         logger.info("Integrated AC-AI System initialized successfully")
