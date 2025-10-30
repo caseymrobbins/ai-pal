@@ -246,12 +246,13 @@ class IntegratedACSystem:
                 else None
             )
 
-            # Initialize FFE with connectors
+            # Initialize FFE with connectors and orchestrator for AI-powered components
             self.ffe_engine = FractalFlowEngine(
                 storage_dir=config.data_dir / "ffe",
                 personality_connector=personality_connector,
                 ari_connector=ari_connector,
                 dashboard_connector=dashboard_connector,
+                orchestrator=self.orchestrator,  # Enable AI-powered FFE components
             )
 
         logger.info("Integrated AC-AI System initialized successfully")
@@ -463,14 +464,77 @@ class IntegratedACSystem:
                         temperature=0.7,
                     )
 
-                    result.model_response = llm_response.text
+                    result.model_response = llm_response.generated_text
                     result.cost = llm_response.cost_usd
                     result.latency_ms = llm_response.latency_ms
 
                     logger.info(
-                        f"Model execution complete: {llm_response.tokens_used} tokens, "
+                        f"Model execution complete: {llm_response.total_tokens} tokens, "
                         f"${llm_response.cost_usd:.4f}, {llm_response.latency_ms:.0f}ms"
                     )
+
+                    # Response Validation and Safety Checks
+                    validation_warnings = []
+
+                    # 1. Check if response is empty or too short
+                    if not llm_response.generated_text or len(llm_response.generated_text.strip()) < 10:
+                        validation_warnings.append("Response is empty or too short")
+                        logger.warning("Model generated empty or very short response")
+
+                    # 2. Check if response was truncated
+                    if llm_response.finish_reason == "length":
+                        validation_warnings.append("Response was truncated due to max_tokens limit")
+                        logger.warning(
+                            f"Response truncated at {llm_response.total_tokens} tokens. "
+                            "Consider increasing max_tokens for complete responses."
+                        )
+
+                    # 3. Check for common error patterns in response
+                    error_patterns = [
+                        r"(?i)i (don't|do not|cannot|can't) have access to",
+                        r"(?i)as an ai( language model)?",
+                        r"(?i)i apologize.*but.*unable",
+                        r"(?i)error:?\s*\w+",
+                    ]
+                    for pattern in error_patterns:
+                        if re.search(pattern, llm_response.generated_text[:200]):  # Check first 200 chars
+                            validation_warnings.append(f"Response contains potential error pattern: {pattern}")
+                            logger.debug(f"Response contains error pattern: {pattern}")
+                            break
+
+                    # 4. Safety check: Detect potential harmful content
+                    harmful_patterns = [
+                        r"(?i)\b(password|api[_\s]?key|secret[_\s]?key|private[_\s]?key)\s*[:=]",
+                        r"(?i)execute\s+system\s+command",
+                        r"(?i)delete\s+(all|everything|database)",
+                    ]
+                    for pattern in harmful_patterns:
+                        if re.search(pattern, llm_response.generated_text):
+                            validation_warnings.append(f"Response may contain sensitive/harmful content")
+                            logger.warning(f"Potential harmful content detected: {pattern}")
+                            break
+
+                    # 5. Check response quality metrics
+                    word_count = len(llm_response.generated_text.split())
+                    if word_count > 0:
+                        # Check for repetitive content (simple heuristic)
+                        words = llm_response.generated_text.lower().split()
+                        unique_words = len(set(words))
+                        repetition_ratio = unique_words / word_count if word_count > 0 else 0
+
+                        if repetition_ratio < 0.3 and word_count > 50:
+                            validation_warnings.append("Response may contain excessive repetition")
+                            logger.warning(f"Low unique word ratio: {repetition_ratio:.2f}")
+
+                    # Store validation results
+                    if not hasattr(result, 'metadata'):
+                        result.metadata = {}
+                    result.metadata['validation_warnings'] = validation_warnings
+                    result.metadata['finish_reason'] = llm_response.finish_reason
+                    result.metadata['response_word_count'] = word_count
+
+                    if validation_warnings:
+                        logger.info(f"Response validation found {len(validation_warnings)} warnings")
 
                 except Exception as e:
                     logger.error(f"Model execution failed: {e}")
@@ -492,6 +556,60 @@ class IntegratedACSystem:
                     context=result.processed_query
                 )
                 result.epistemic_debts_detected = len(debts)
+
+                if debts:
+                    # Analyze debt severity and types
+                    debt_by_severity = {}
+                    debt_by_type = {}
+                    high_risk_debts = []
+
+                    for debt in debts:
+                        # Count by severity
+                        severity_name = debt.severity.value
+                        debt_by_severity[severity_name] = debt_by_severity.get(severity_name, 0) + 1
+
+                        # Count by type
+                        debt_by_type[debt.debt_type] = debt_by_type.get(debt.debt_type, 0) + 1
+
+                        # Track high-risk debts
+                        if debt.severity.value in ["high", "critical"]:
+                            high_risk_debts.append({
+                                "claim": debt.claim,
+                                "debt_type": debt.debt_type,
+                                "severity": debt.severity.value,
+                            })
+
+                    # Store detailed debt information in metadata
+                    if not hasattr(result, 'metadata'):
+                        result.metadata = {}
+                    result.metadata['epistemic_debts'] = {
+                        "total_count": len(debts),
+                        "by_severity": debt_by_severity,
+                        "by_type": debt_by_type,
+                        "high_risk_count": len(high_risk_debts),
+                        "high_risk_debts": high_risk_debts[:5],  # Limit to first 5
+                    }
+
+                    # Log detailed debt information
+                    logger.info(
+                        f"Epistemic debt detected: {len(debts)} instances "
+                        f"(severity: {debt_by_severity}, types: {debt_by_type})"
+                    )
+
+                    # Add warnings for high-risk debts
+                    if high_risk_debts:
+                        logger.warning(
+                            f"Found {len(high_risk_debts)} high-risk epistemic debts. "
+                            "Response may contain unverified claims or missing citations."
+                        )
+
+                        # Add EDM warnings to validation warnings if they exist
+                        if 'validation_warnings' in result.metadata:
+                            result.metadata['validation_warnings'].append(
+                                f"Response contains {len(high_risk_debts)} high-risk epistemic debts"
+                            )
+                else:
+                    logger.debug("No epistemic debt detected in response")
 
             # ARI: Record agency snapshot
             if self.ari_monitor:

@@ -793,6 +793,85 @@ class MultiModelOrchestrator:
         # Yield complete response
         yield response.generated_text
 
+    async def route_request(
+        self,
+        prompt: str,
+        task_complexity: TaskComplexity = TaskComplexity.SIMPLE,
+        optimization_goal: str = "balanced",
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 1000,
+        temperature: float = 0.7,
+        **kwargs
+    ) -> Dict[str, any]:
+        """
+        High-level convenience method: select optimal model and execute
+
+        This is a simplified interface that combines select_model() and execute_model()
+        into a single call. Useful for quick integrations.
+
+        Args:
+            prompt: User prompt
+            task_complexity: Task complexity level
+            optimization_goal: "cost", "latency", "quality", "balanced", "privacy"
+            system_prompt: Optional system prompt
+            max_tokens: Maximum tokens to generate
+            temperature: Sampling temperature
+            **kwargs: Additional parameters
+
+        Returns:
+            Dict with response and metadata:
+            {
+                "response": str,  # Generated text
+                "model": str,  # Model name used
+                "provider": str,  # Provider name
+                "tokens": int,  # Total tokens
+                "cost": float,  # Cost in USD
+                "latency_ms": float,  # Latency in milliseconds
+            }
+        """
+        # Map string optimization goal to enum
+        opt_goal_map = {
+            "cost": OptimizationGoal.COST,
+            "latency": OptimizationGoal.LATENCY,
+            "quality": OptimizationGoal.QUALITY,
+            "balanced": OptimizationGoal.BALANCED,
+            "privacy": OptimizationGoal.PRIVACY,
+        }
+        opt_goal = opt_goal_map.get(optimization_goal, OptimizationGoal.BALANCED)
+
+        # Create task requirements
+        requirements = TaskRequirements(
+            task_type="general",
+            complexity=task_complexity,
+            estimated_input_tokens=len(prompt.split()) * 2,  # Rough estimate
+            estimated_output_tokens=max_tokens // 2,  # Rough estimate
+        )
+
+        # Select model
+        selection = await self.select_model(requirements, opt_goal)
+
+        # Execute model
+        response = await self.execute_model(
+            provider=selection.provider,
+            model_name=selection.model_name,
+            prompt=prompt,
+            system_prompt=system_prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+
+        # Return simplified dict
+        return {
+            "response": response.generated_text,
+            "model": response.model_name,
+            "provider": response.provider,
+            "tokens": response.total_tokens,
+            "cost": response.cost_usd,
+            "latency_ms": response.latency_ms,
+            "finish_reason": response.finish_reason,
+            "full_response": response,  # Include full response object
+        }
+
     async def record_performance(
         self,
         provider: ModelProvider,

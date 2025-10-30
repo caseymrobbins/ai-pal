@@ -25,6 +25,7 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any, Set
 from pathlib import Path
+from dataclasses import dataclass
 
 from loguru import logger
 
@@ -54,11 +55,13 @@ from .models import (
     BottleneckTask,
     BottleneckReason,
     FFEMetrics,
+    TimeBlockSize,
 )
 from .interfaces import (
     IPersonalityModuleConnector,
     IARIConnector,
     IDashboardConnector,
+    IGrowthScaffold,
 )
 
 
@@ -596,3 +599,801 @@ async def get_ffe_ai_task_requirements() -> TaskRequirements:
         max_latency_ms=2000,             # Fast response for good UX
         requires_local_execution=False,
     )
+
+
+# ============================================================================
+# ADVANCED ARI-FFE INTEGRATION
+# ============================================================================
+
+
+@dataclass
+class BottleneckSeverity:
+    """
+    Severity assessment for a detected bottleneck
+    """
+    severity_score: float  # 0-1, higher = more severe
+    urgency: str  # "low", "medium", "high", "critical"
+
+    # Contributing factors
+    skill_gap: float
+    avoidance_frequency: float
+    agency_impact: float
+    time_since_last_attempt: float
+
+    # Recommendations
+    recommended_priority: int  # Lower = higher priority
+    suggested_reframe_intensity: float  # How strong should reframe be?
+
+
+class RealTimeBottleneckDetector:
+    """
+    Real-time bottleneck detection from ARI snapshots
+
+    Unlike batch-based detection, this monitors ARI snapshots as they arrive
+    and immediately creates bottleneck tasks when thresholds are exceeded.
+
+    Features:
+    - Real-time monitoring of ARI snapshots
+    - Automatic bottleneck creation on threshold violations
+    - Severity calculation for prioritization
+    - Auto-queueing to Growth Scaffold
+    """
+
+    def __init__(
+        self,
+        ari_monitor: ARIMonitor,
+        growth_scaffold: IGrowthScaffold,
+        skill_loss_threshold: float = -0.15,
+        agency_loss_threshold: float = -0.1,
+        high_reliance_threshold: float = 0.9,
+    ):
+        """
+        Initialize real-time detector
+
+        Args:
+            ari_monitor: ARI Monitor to watch
+            growth_scaffold: Growth Scaffold to queue bottlenecks to
+            skill_loss_threshold: Create bottleneck if skill_development below this
+            agency_loss_threshold: Create bottleneck if delta_agency below this
+            high_reliance_threshold: Create bottleneck if ai_reliance above this
+        """
+        self.ari_monitor = ari_monitor
+        self.growth_scaffold = growth_scaffold
+        self.skill_loss_threshold = skill_loss_threshold
+        self.agency_loss_threshold = agency_loss_threshold
+        self.high_reliance_threshold = high_reliance_threshold
+
+        # Track what we've already created bottlenecks for
+        self.created_bottlenecks: Set[str] = set()  # task_type+user_id combos
+
+        logger.info(
+            f"RealTimeBottleneckDetector initialized "
+            f"(skill_loss: {skill_loss_threshold}, "
+            f"agency_loss: {agency_loss_threshold}, "
+            f"high_reliance: {high_reliance_threshold})"
+        )
+
+    async def analyze_snapshot(
+        self,
+        snapshot: 'AgencySnapshot'
+    ) -> Optional[BottleneckTask]:
+        """
+        Analyze a single ARI snapshot and create bottleneck if needed
+
+        Args:
+            snapshot: Newly recorded agency snapshot
+
+        Returns:
+            Created BottleneckTask if thresholds exceeded, else None
+        """
+        logger.debug(
+            f"Analyzing snapshot for {snapshot.user_id} - "
+            f"task: {snapshot.task_type}, "
+            f"skill_dev: {snapshot.skill_development:.2f}, "
+            f"agency: {snapshot.delta_agency:.2f}, "
+            f"ai_reliance: {snapshot.ai_reliance:.2f}"
+        )
+
+        # Check if this task+user combo already has a bottleneck
+        bottleneck_key = f"{snapshot.user_id}:{snapshot.task_type}"
+        if bottleneck_key in self.created_bottlenecks:
+            logger.debug(f"Bottleneck already exists for {bottleneck_key}, skipping")
+            return None
+
+        # Determine if bottleneck should be created
+        bottleneck_reason = None
+
+        if snapshot.skill_development < self.skill_loss_threshold:
+            bottleneck_reason = BottleneckReason.SKILL_DEFICIT
+            logger.info(
+                f"Skill loss detected: {snapshot.skill_development:.2f} < {self.skill_loss_threshold}"
+            )
+        elif snapshot.delta_agency < self.agency_loss_threshold:
+            bottleneck_reason = BottleneckReason.ANXIETY_INDUCING
+            logger.info(
+                f"Agency loss detected: {snapshot.delta_agency:.2f} < {self.agency_loss_threshold}"
+            )
+        elif snapshot.ai_reliance > self.high_reliance_threshold:
+            bottleneck_reason = BottleneckReason.DEPENDENCY
+            logger.info(
+                f"High AI reliance detected: {snapshot.ai_reliance:.2f} > {self.high_reliance_threshold}"
+            )
+
+        if bottleneck_reason is None:
+            # No bottleneck detected
+            return None
+
+        # Create bottleneck task
+        severity = self._calculate_severity(snapshot)
+
+        bottleneck = BottleneckTask(
+            user_id=snapshot.user_id,
+            task_description=f"Task type: {snapshot.task_type}",
+            task_category=snapshot.task_type,
+            bottleneck_reason=bottleneck_reason,
+            detection_method="real_time_ari_monitor",
+            avoidance_count=1,
+            last_avoided=snapshot.timestamp,
+            importance_score=self._estimate_importance(snapshot),
+            skill_gap_severity=severity.skill_gap,
+            queued=True,
+            queued_date=datetime.now(),
+        )
+
+        # Queue to Growth Scaffold
+        await self.growth_scaffold.queue_bottleneck(bottleneck)
+
+        # Remember we created this
+        self.created_bottlenecks.add(bottleneck_key)
+
+        logger.info(
+            f"Created bottleneck {bottleneck.bottleneck_id} for {snapshot.task_type} "
+            f"(severity: {severity.severity_score:.2f}, urgency: {severity.urgency})"
+        )
+
+        return bottleneck
+
+    def _calculate_severity(
+        self,
+        snapshot: 'AgencySnapshot'
+    ) -> BottleneckSeverity:
+        """
+        Calculate severity of bottleneck from snapshot metrics
+
+        Args:
+            snapshot: Agency snapshot
+
+        Returns:
+            BottleneckSeverity assessment
+        """
+        # Skill gap: how far is skill_after below ideal (1.0)?
+        skill_gap = max(0.0, 1.0 - snapshot.user_skill_after)
+
+        # Avoidance: inferred from low autonomy + high AI reliance
+        avoidance_frequency = (snapshot.ai_reliance + (1.0 - snapshot.autonomy_retention)) / 2.0
+
+        # Agency impact: magnitude of agency loss
+        agency_impact = max(0.0, -snapshot.delta_agency)
+
+        # Time factor: not available in single snapshot, default to 0
+        time_since_last_attempt = 0.0
+
+        # Overall severity: weighted combination
+        severity_score = (
+            0.4 * skill_gap +
+            0.3 * avoidance_frequency +
+            0.2 * agency_impact +
+            0.1 * time_since_last_attempt
+        )
+
+        # Determine urgency level
+        if severity_score >= 0.8:
+            urgency = "critical"
+            priority = 1
+        elif severity_score >= 0.6:
+            urgency = "high"
+            priority = 2
+        elif severity_score >= 0.4:
+            urgency = "medium"
+            priority = 3
+        else:
+            urgency = "low"
+            priority = 4
+
+        # Suggested reframe intensity: higher severity = gentler reframe
+        # (We don't want to overwhelm user with hard tasks when they're struggling)
+        suggested_reframe_intensity = max(0.3, 1.0 - severity_score)
+
+        return BottleneckSeverity(
+            severity_score=severity_score,
+            urgency=urgency,
+            skill_gap=skill_gap,
+            avoidance_frequency=avoidance_frequency,
+            agency_impact=agency_impact,
+            time_since_last_attempt=time_since_last_attempt,
+            recommended_priority=priority,
+            suggested_reframe_intensity=suggested_reframe_intensity,
+        )
+
+    def _estimate_importance(self, snapshot: 'AgencySnapshot') -> float:
+        """
+        Estimate importance of task from snapshot
+
+        Tasks with higher task_efficacy potential are more important.
+
+        Args:
+            snapshot: Agency snapshot
+
+        Returns:
+            Importance score (0-1)
+        """
+        # Use task_efficacy as proxy for importance
+        # High efficacy = important task worth doing well
+        return min(1.0, max(0.0, snapshot.task_efficacy))
+
+    async def start_monitoring(self) -> None:
+        """
+        Start monitoring ARI snapshots in background
+
+        Note: This would need to be implemented as a background task
+        that watches for new snapshots being added to ari_monitor.
+        For now, this is a placeholder for future async monitoring.
+        """
+        logger.info("Real-time bottleneck monitoring started")
+        # Future: asyncio.create_task to monitor snapshots
+        pass
+
+    def reset_created_bottlenecks(self, user_id: Optional[str] = None) -> None:
+        """
+        Reset tracking of created bottlenecks
+
+        Args:
+            user_id: If provided, only reset for this user
+        """
+        if user_id:
+            self.created_bottlenecks = {
+                key for key in self.created_bottlenecks
+                if not key.startswith(f"{user_id}:")
+            }
+            logger.info(f"Reset bottleneck tracking for user {user_id}")
+        else:
+            self.created_bottlenecks.clear()
+            logger.info("Reset all bottleneck tracking")
+
+
+class AdaptiveDifficultyScaler:
+    """
+    Adaptive difficulty scaling based on ARI metrics
+
+    Uses user's skill development trends, AI reliance, and agency retention
+    to calculate optimal task difficulty - the "Goldilocks zone" where
+    tasks are challenging but not overwhelming.
+
+    Features:
+    - Analyzes skill trends from ARI data
+    - Recommends task complexity adjustments
+    - Suggests time block sizes
+    - Prevents skill atrophy through strategic difficulty
+    """
+
+    def __init__(
+        self,
+        ari_monitor: ARIMonitor,
+        lookback_days: int = 14,
+    ):
+        """
+        Initialize adaptive difficulty scaler
+
+        Args:
+            ari_monitor: ARI Monitor for accessing metrics
+            lookback_days: How many days of history to analyze
+        """
+        self.ari_monitor = ari_monitor
+        self.lookback_days = lookback_days
+        logger.info(f"AdaptiveDifficultyScaler initialized (lookback: {lookback_days} days)")
+
+    async def calculate_optimal_difficulty(
+        self,
+        user_id: str,
+        task_category: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Calculate optimal task difficulty for user
+
+        Args:
+            user_id: User to calculate for
+            task_category: Optional specific task category to analyze
+
+        Returns:
+            Dict with difficulty recommendations
+        """
+        logger.debug(f"Calculating optimal difficulty for {user_id}")
+
+        # Get recent ARI data
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=self.lookback_days)
+        report = self.ari_monitor.generate_report(user_id, start_date, end_date)
+
+        # Get recent snapshots
+        if user_id not in self.ari_monitor.snapshots:
+            logger.warning(f"No snapshots found for user {user_id}")
+            return self._default_difficulty_settings()
+
+        snapshots = self.ari_monitor.snapshots[user_id]
+        recent = [
+            s for s in snapshots
+            if s.timestamp >= start_date
+        ]
+
+        if task_category:
+            recent = [s for s in recent if s.task_type == task_category]
+
+        if not recent:
+            logger.warning(f"No recent snapshots for {user_id} in category {task_category}")
+            return self._default_difficulty_settings()
+
+        # Calculate trends
+        avg_skill_development = sum(s.skill_development for s in recent) / len(recent)
+        avg_ai_reliance = sum(s.ai_reliance for s in recent) / len(recent)
+        avg_autonomy = sum(s.autonomy_retention for s in recent) / len(recent)
+        avg_agency = sum(s.delta_agency for s in recent) / len(recent)
+
+        # Determine difficulty adjustments
+        difficulty = self._calculate_goldilocks_difficulty(
+            avg_skill_development,
+            avg_ai_reliance,
+            avg_autonomy,
+            avg_agency,
+        )
+
+        logger.info(
+            f"Optimal difficulty for {user_id}: {difficulty['complexity_level']} complexity, "
+            f"{difficulty['time_block_size']} blocks "
+            f"(skill_dev: {avg_skill_development:.2f}, reliance: {avg_ai_reliance:.2f})"
+        )
+
+        return difficulty
+
+    def _calculate_goldilocks_difficulty(
+        self,
+        avg_skill_development: float,
+        avg_ai_reliance: float,
+        avg_autonomy: float,
+        avg_agency: float,
+    ) -> Dict[str, Any]:
+        """
+        Calculate "Goldilocks" difficulty - not too hard, not too easy
+
+        Args:
+            avg_skill_development: Average skill development trend
+            avg_ai_reliance: Average AI reliance
+            avg_autonomy: Average autonomy retention
+            avg_agency: Average agency change
+
+        Returns:
+            Difficulty settings dict
+        """
+        # Calculate overall performance score (0-1)
+        # Higher = user doing well = can handle more difficulty
+        performance_score = (
+            0.3 * max(0, min(1, (avg_skill_development + 0.2) / 0.4)) +  # Normalize skill dev
+            0.3 * (1.0 - avg_ai_reliance) +  # Less reliance = better
+            0.2 * avg_autonomy +
+            0.2 * max(0, min(1, (avg_agency + 0.1) / 0.2))  # Normalize agency
+        )
+
+        # Determine complexity level
+        if performance_score >= 0.75:
+            complexity = "challenging"
+            complexity_level = 4
+        elif performance_score >= 0.55:
+            complexity = "moderate"
+            complexity_level = 3
+        elif performance_score >= 0.35:
+            complexity = "comfortable"
+            complexity_level = 2
+        else:
+            complexity = "easy"
+            complexity_level = 1
+
+        # Determine time block size
+        # Lower performance = smaller blocks (less overwhelming)
+        if performance_score >= 0.7:
+            time_block = TimeBlockSize.LARGE  # 90 min
+        elif performance_score >= 0.5:
+            time_block = TimeBlockSize.MEDIUM  # 45 min
+        elif performance_score >= 0.3:
+            time_block = TimeBlockSize.SMALL  # 25 min
+        else:
+            time_block = TimeBlockSize.TINY  # 15 min
+
+        # Calculate growth vs comfort ratio
+        # Higher performance = more growth tasks acceptable
+        growth_ratio = min(0.5, max(0.1, performance_score * 0.6))
+        comfort_ratio = 1.0 - growth_ratio
+
+        return {
+            "performance_score": performance_score,
+            "complexity": complexity,
+            "complexity_level": complexity_level,
+            "time_block_size": time_block,
+            "growth_task_ratio": growth_ratio,
+            "comfort_task_ratio": comfort_ratio,
+            "recommendation": self._generate_difficulty_recommendation(
+                performance_score,
+                avg_skill_development,
+                avg_ai_reliance,
+            ),
+        }
+
+    def _generate_difficulty_recommendation(
+        self,
+        performance_score: float,
+        avg_skill_development: float,
+        avg_ai_reliance: float,
+    ) -> str:
+        """
+        Generate human-readable difficulty recommendation
+
+        Args:
+            performance_score: Overall performance score
+            avg_skill_development: Average skill development
+            avg_ai_reliance: Average AI reliance
+
+        Returns:
+            Recommendation text
+        """
+        if performance_score >= 0.75:
+            return (
+                "User is excelling - increase challenge level with growth tasks. "
+                "Skills are developing well and AI reliance is healthy."
+            )
+        elif performance_score >= 0.55:
+            return (
+                "User is performing well - maintain current difficulty with "
+                "balanced mix of comfort and growth tasks."
+            )
+        elif performance_score >= 0.35:
+            if avg_ai_reliance > 0.7:
+                return (
+                    "User showing high AI reliance - reduce difficulty and "
+                    "focus on building confidence with strength-based tasks."
+                )
+            elif avg_skill_development < -0.1:
+                return (
+                    "Skills declining - reduce task complexity and focus on "
+                    "rebuilding fundamentals with smaller blocks."
+                )
+            else:
+                return (
+                    "User needs support - use smaller time blocks and "
+                    "comfortable tasks to rebuild momentum."
+                )
+        else:
+            return (
+                "User struggling - minimize difficulty with tiny blocks and "
+                "focus exclusively on strength-based tasks. Avoid growth tasks "
+                "until confidence rebuilds."
+            )
+
+    def _default_difficulty_settings(self) -> Dict[str, Any]:
+        """
+        Return default difficulty settings when no data available
+
+        Returns:
+            Default settings dict
+        """
+        return {
+            "performance_score": 0.5,
+            "complexity": "moderate",
+            "complexity_level": 3,
+            "time_block_size": TimeBlockSize.SMALL,
+            "growth_task_ratio": 0.3,
+            "comfort_task_ratio": 0.7,
+            "recommendation": "No historical data available - starting with moderate difficulty and small time blocks.",
+        }
+
+
+class SkillAtrophyPrevention:
+    """
+    Proactive skill atrophy prevention system
+
+    Monitors skills for early signs of decline and suggests "touch-base"
+    practice tasks before significant atrophy occurs (30-day threshold).
+
+    Features:
+    - Early detection of skill decline trends
+    - Proactive practice task suggestions
+    - Skill trend visualization data
+    - Integration with Growth Scaffold for queuing
+    """
+
+    def __init__(
+        self,
+        ari_monitor: ARIMonitor,
+        growth_scaffold: IGrowthScaffold,
+        warning_days: int = 14,  # Warn if skill unused for this long
+        critical_days: int = 30,  # Critical if unused for this long
+    ):
+        """
+        Initialize skill atrophy prevention
+
+        Args:
+            ari_monitor: ARI Monitor for skill tracking
+            growth_scaffold: Growth Scaffold for queueing practice tasks
+            warning_days: Days before warning about unused skill
+            critical_days: Days before critical atrophy alert
+        """
+        self.ari_monitor = ari_monitor
+        self.growth_scaffold = growth_scaffold
+        self.warning_days = warning_days
+        self.critical_days = critical_days
+
+        logger.info(
+            f"SkillAtrophyPrevention initialized "
+            f"(warning: {warning_days} days, critical: {critical_days} days)"
+        )
+
+    async def detect_declining_skills(
+        self,
+        user_id: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Detect skills showing decline trends
+
+        Args:
+            user_id: User to analyze
+
+        Returns:
+            List of declining skill dicts with metadata
+        """
+        logger.debug(f"Detecting declining skills for {user_id}")
+
+        if user_id not in self.ari_monitor.snapshots:
+            return []
+
+        snapshots = self.ari_monitor.snapshots[user_id]
+
+        # Group snapshots by task type (proxy for skill)
+        task_snapshots: Dict[str, List['AgencySnapshot']] = {}
+        for snapshot in snapshots:
+            task_type = snapshot.task_type
+            if task_type not in task_snapshots:
+                task_snapshots[task_type] = []
+            task_snapshots[task_type].append(snapshot)
+
+        declining_skills = []
+        now = datetime.now()
+
+        for task_type, task_snaps in task_snapshots.items():
+            # Sort by timestamp
+            task_snaps.sort(key=lambda s: s.timestamp)
+
+            # Get last snapshot
+            last_snap = task_snaps[-1]
+            days_since = (now - last_snap.timestamp).days
+
+            # Calculate skill trend (last 5 snapshots)
+            recent = task_snaps[-5:]
+            if len(recent) >= 2:
+                # Compare early vs late skill levels
+                early_skill = sum(s.user_skill_after for s in recent[:len(recent)//2]) / (len(recent)//2)
+                late_skill = sum(s.user_skill_after for s in recent[len(recent)//2:]) / (len(recent) - len(recent)//2)
+                skill_change = late_skill - early_skill
+            else:
+                skill_change = 0.0
+
+            # Check for decline
+            is_declining = skill_change < -0.1
+            is_unused = days_since >= self.warning_days
+            is_critical = days_since >= self.critical_days
+
+            if is_declining or is_unused:
+                declining_skills.append({
+                    "skill_category": task_type,
+                    "days_since_use": days_since,
+                    "skill_change": skill_change,
+                    "last_skill_level": last_snap.user_skill_after,
+                    "status": "critical" if is_critical else "warning" if is_unused else "declining",
+                    "practice_urgency": self._calculate_practice_urgency(
+                        days_since, skill_change, last_snap.user_skill_after
+                    ),
+                })
+
+        # Sort by practice urgency (descending)
+        declining_skills.sort(key=lambda s: s["practice_urgency"], reverse=True)
+
+        logger.info(f"Found {len(declining_skills)} declining skills for {user_id}")
+        return declining_skills
+
+    def _calculate_practice_urgency(
+        self,
+        days_since: int,
+        skill_change: float,
+        current_level: float,
+    ) -> float:
+        """
+        Calculate urgency of practicing this skill (0-1)
+
+        Args:
+            days_since: Days since last use
+            skill_change: Recent skill trend
+            current_level: Current skill level
+
+        Returns:
+            Urgency score (0-1)
+        """
+        # Time component: higher if unused longer
+        time_urgency = min(1.0, days_since / self.critical_days)
+
+        # Decline component: higher if declining faster
+        decline_urgency = min(1.0, max(0.0, -skill_change / 0.3))
+
+        # Level component: higher urgency if skill was previously high
+        # (losing a high-level skill is worse than losing a low-level one)
+        level_urgency = current_level
+
+        # Combined urgency
+        urgency = (
+            0.4 * time_urgency +
+            0.4 * decline_urgency +
+            0.2 * level_urgency
+        )
+
+        return min(1.0, urgency)
+
+    async def generate_practice_suggestions(
+        self,
+        user_id: str,
+        max_suggestions: int = 3
+    ) -> List[Dict[str, Any]]:
+        """
+        Generate practice task suggestions for declining skills
+
+        Args:
+            user_id: User to generate suggestions for
+            max_suggestions: Maximum number of suggestions to return
+
+        Returns:
+            List of practice suggestion dicts
+        """
+        declining = await self.detect_declining_skills(user_id)
+
+        suggestions = []
+        for skill in declining[:max_suggestions]:
+            suggestion = {
+                "skill_category": skill["skill_category"],
+                "urgency": skill["practice_urgency"],
+                "suggested_task": f"Touch-base practice: {skill['skill_category']}",
+                "time_block_size": TimeBlockSize.SMALL,  # Keep it low-pressure
+                "rationale": self._generate_practice_rationale(skill),
+            }
+            suggestions.append(suggestion)
+
+        logger.info(f"Generated {len(suggestions)} practice suggestions for {user_id}")
+        return suggestions
+
+    def _generate_practice_rationale(self, skill: Dict[str, Any]) -> str:
+        """
+        Generate explanation for why practice is suggested
+
+        Args:
+            skill: Skill info dict
+
+        Returns:
+            Rationale text
+        """
+        days = skill["days_since_use"]
+        status = skill["status"]
+
+        if status == "critical":
+            return (
+                f"It's been {days} days since you practiced {skill['skill_category']}. "
+                f"A quick touch-base session would help prevent skill atrophy."
+            )
+        elif status == "warning":
+            return (
+                f"It's been {days} days since working on {skill['skill_category']}. "
+                f"A brief practice session would keep this skill fresh."
+            )
+        else:  # declining
+            return (
+                f"Your {skill['skill_category']} skill has shown a slight decline recently. "
+                f"A focused practice session could help rebuild confidence."
+            )
+
+    async def queue_practice_tasks(
+        self,
+        user_id: str,
+        max_tasks: int = 2
+    ) -> List[BottleneckTask]:
+        """
+        Queue practice tasks for declining skills to Growth Scaffold
+
+        Args:
+            user_id: User to queue tasks for
+            max_tasks: Maximum tasks to queue
+
+        Returns:
+            List of queued BottleneckTask objects
+        """
+        suggestions = await self.generate_practice_suggestions(user_id, max_tasks)
+
+        queued_tasks = []
+        for suggestion in suggestions:
+            # Create bottleneck task for practice
+            bottleneck = BottleneckTask(
+                user_id=user_id,
+                task_description=suggestion["suggested_task"],
+                task_category=suggestion["skill_category"],
+                bottleneck_reason=BottleneckReason.AVOIDED,
+                detection_method="skill_atrophy_prevention",
+                avoidance_count=0,  # Not technically avoided, just unused
+                last_avoided=None,
+                importance_score=suggestion["urgency"],
+                skill_gap_severity=suggestion["urgency"],
+                queued=True,
+                queued_date=datetime.now(),
+            )
+
+            await self.growth_scaffold.queue_bottleneck(bottleneck)
+            queued_tasks.append(bottleneck)
+
+            logger.info(
+                f"Queued practice task for {suggestion['skill_category']} "
+                f"(urgency: {suggestion['urgency']:.2f})"
+            )
+
+        return queued_tasks
+
+    async def get_skill_trends(
+        self,
+        user_id: str,
+        task_category: str
+    ) -> Dict[str, Any]:
+        """
+        Get skill trend data for visualization
+
+        Args:
+            user_id: User to analyze
+            task_category: Specific skill/task category
+
+        Returns:
+            Trend data dict suitable for graphing
+        """
+        if user_id not in self.ari_monitor.snapshots:
+            return {"error": "No data available"}
+
+        snapshots = [
+            s for s in self.ari_monitor.snapshots[user_id]
+            if s.task_type == task_category
+        ]
+
+        if not snapshots:
+            return {"error": f"No data for category {task_category}"}
+
+        # Sort by time
+        snapshots.sort(key=lambda s: s.timestamp)
+
+        # Extract trend data
+        timestamps = [s.timestamp.isoformat() for s in snapshots]
+        skill_levels = [s.user_skill_after for s in snapshots]
+        skill_developments = [s.skill_development for s in snapshots]
+
+        # Calculate overall trend
+        if len(skill_levels) >= 2:
+            trend_slope = (skill_levels[-1] - skill_levels[0]) / len(skill_levels)
+        else:
+            trend_slope = 0.0
+
+        return {
+            "task_category": task_category,
+            "data_points": len(snapshots),
+            "timestamps": timestamps,
+            "skill_levels": skill_levels,
+            "skill_developments": skill_developments,
+            "trend_slope": trend_slope,
+            "trend_direction": "improving" if trend_slope > 0.05 else "declining" if trend_slope < -0.05 else "stable",
+            "current_level": skill_levels[-1] if skill_levels else 0.0,
+            "days_since_last": (datetime.now() - snapshots[-1].timestamp).days if snapshots else 999,
+        }
