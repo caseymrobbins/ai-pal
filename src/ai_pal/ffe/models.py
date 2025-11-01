@@ -26,12 +26,19 @@ import uuid
 
 class StrengthType(Enum):
     """User signature strength types"""
+    # Core 8 strength types (Priority 3)
+    ANALYTICAL = "analytical"           # Problem-solving, logical thinking
+    CREATIVE = "creative"               # Innovation, brainstorming, design
+    SOCIAL = "social"                   # Collaboration, empathy, communication
+    PRACTICAL = "practical"             # Hands-on building, implementation
+    STRATEGIC = "strategic"             # Planning, organizing, vision
+    EMPATHETIC = "empathetic"           # Understanding others, emotional intelligence
+    RESILIENT = "resilient"             # Perseverance, bouncing back
+    CURIOUS = "curious"                 # Learning, exploring, discovering
+
+    # Legacy types (backward compatibility)
     VISUAL_THINKING = "visual_thinking"
-    ANALYTICAL = "analytical"
-    EMPATHETIC = "empathetic"
-    CREATIVE = "creative"
     SYSTEMATIC = "systematic"
-    SOCIAL = "social"
     KINESTHETIC = "kinesthetic"
     VERBAL = "verbal"
     MUSICAL = "musical"
