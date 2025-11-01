@@ -1,0 +1,142 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-pal-app
+  namespace: ai-pal
+  labels:
+    app: ai-pal
+    component: app
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: ai-pal
+      component: app
+  template:
+    metadata:
+      labels:
+        app: ai-pal
+        component: app
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      initContainers:
+      # Wait for database to be ready
+      - name: wait-for-db
+        image: postgres:14-alpine
+        command:
+        - sh
+        - -c
+        - |
+          until pg_isready -h postgres-service -p 5432 -U aipal; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+          echo "PostgreSQL is ready!"
+
+      # Run database migrations
+      - name: run-migrations
+        image: ai-pal:latest  # Replace with your image
+        command:
+        - sh
+        - -c
+        - |
+          echo "Running database migrations..."
+          python -m alembic upgrade head
+        envFrom:
+        - configMapRef:
+            name: ai-pal-config
+        - secretRef:
+            name: ai-pal-secrets
+
+      containers:
+      - name: ai-pal
+        image: ai-pal:latest  # Replace with your image registry/tag
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+
+        envFrom:
+        - configMapRef:
+            name: ai-pal-config
+        - secretRef:
+            name: ai-pal-secrets
+
+        volumeMounts:
+        - name: data
+          mountPath: /app/data
+        - name: logs
+          mountPath: /app/logs
+        - name: models
+          mountPath: /app/models
+
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        # Graceful shutdown
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - sh
+              - -c
+              - sleep 15
+
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: ai-pal-data-pvc
+      - name: logs
+        persistentVolumeClaim:
+          claimName: ai-pal-logs-pvc
+      - name: models
+        persistentVolumeClaim:
+          claimName: ai-pal-models-pvc
+
+      # Optional: Use node affinity for GPU nodes if using local models
+      # affinity:
+      #   nodeAffinity:
+      #     requiredDuringSchedulingIgnoredDuringExecution:
+      #       nodeSelectorTerms:
+      #       - matchExpressions:
+      #         - key: gpu
+      #           operator: In
+      #           values:
+      #           - "true"
