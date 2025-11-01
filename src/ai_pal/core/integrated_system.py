@@ -274,7 +274,7 @@ class IntegratedACSystem:
             if config.enable_personality_discovery:
                 # Create personality discovery and dynamic connector
                 personality_discovery = PersonalityDiscoveryModule(
-                    orchestrator=self.orchestrator
+                    storage_dir=str(config.data_dir / "personality_discovery")
                 )
                 personality_connector_dynamic = DynamicPersonalityConnector(
                     personality_discovery=personality_discovery
@@ -285,8 +285,7 @@ class IntegratedACSystem:
                 # Create teaching interface with protégé pipeline
                 protege_pipeline = ProtegePipeline()
                 teaching_interface = TeachingInterface(
-                    pipeline=protege_pipeline,
-                    orchestrator=self.orchestrator
+                    protege_pipeline=protege_pipeline
                 )
                 logger.info("Teaching mode enabled")
 
