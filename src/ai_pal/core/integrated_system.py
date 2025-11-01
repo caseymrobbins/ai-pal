@@ -45,7 +45,7 @@ from ..ffe.interfaces.social_interface import SocialInterface
 from ..ffe.modules.personality_discovery import PersonalityDiscoveryModule
 from ..ffe.connectors.personality_connector import DynamicPersonalityConnector
 from ..ffe.interfaces.teaching_interface import TeachingInterface
-from ..ffe.modules.protege_pipeline import ProtégéPipeline
+from ..ffe.modules.protege_pipeline import ProtegePipeline
 
 
 class RequestStage(Enum):
@@ -283,7 +283,7 @@ class IntegratedACSystem:
 
             if config.enable_teaching_mode:
                 # Create teaching interface with protégé pipeline
-                protege_pipeline = ProtégéPipeline()
+                protege_pipeline = ProtegePipeline()
                 teaching_interface = TeachingInterface(
                     pipeline=protege_pipeline,
                     orchestrator=self.orchestrator
