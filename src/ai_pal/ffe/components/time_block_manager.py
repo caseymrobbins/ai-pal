@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from loguru import logger
 
-from ..interfaces import ITimeBlockManager
+from ..component_interfaces import ITimeBlockManager
 from ..models import (
     GoalPacket,
     AtomicBlock,

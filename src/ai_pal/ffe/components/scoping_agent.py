@@ -15,7 +15,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 from loguru import logger
 
-from ..interfaces import IScopingAgent
+from ..component_interfaces import IScopingAgent
 from ..models import (
     GoalPacket,
     ScopingSession,

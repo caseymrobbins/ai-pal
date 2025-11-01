@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 from loguru import logger
 
-from ..interfaces import IGrowthScaffold
+from ..component_interfaces import IGrowthScaffold
 from ..models import BottleneckTask, BottleneckReason, SignatureStrength
 
 

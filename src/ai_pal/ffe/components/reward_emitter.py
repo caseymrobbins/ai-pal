@@ -15,7 +15,7 @@ from datetime import datetime
 from typing import Optional, List
 from loguru import logger
 
-from ..interfaces import IRewardEmitter
+from ..component_interfaces import IRewardEmitter
 from ..models import (
     AtomicBlock,
     SignatureStrength,

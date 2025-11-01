@@ -23,7 +23,7 @@ import asyncio
 from dataclasses import asdict
 from loguru import logger
 
-from ..interfaces import IMomentumLoopOrchestrator
+from ..component_interfaces import IMomentumLoopOrchestrator
 from ..models import (
     MomentumLoopState,
     MomentumState,
