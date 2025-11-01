@@ -198,13 +198,13 @@ class Orchestrator:
             llm_request, complexity=complexity, prefer_local=request.prefer_local
         )
 
-        sources.append(f"{llm_response.provider}:{llm_response.model}")
+        sources.append(f"{llm_response.provider}:{llm_response.model_name}")
 
         # Step 6: Store conversation history
         self._store_conversation(
             request.user_id,
             request.message,
-            llm_response.text,
+            llm_response.generated_text,
             pii_scrubbed=pii_scrubbed,
         )
 
@@ -212,7 +212,7 @@ class Orchestrator:
         processing_time = (datetime.now() - start_time).total_seconds() * 1000
 
         return OrchestratorResponse(
-            message=llm_response.text,
+            message=llm_response.generated_text,
             sources=sources,
             pii_scrubbed=pii_scrubbed,
             scrub_details=scrub_details,
