@@ -22,6 +22,7 @@ Priority 4 Interfaces (ARI Measurement):
 - Socratic Co-pilot: Embedded capability assessment during assistance
 """
 
+# User-facing interfaces
 from .progress_tapestry import ProgressTapestry, TapestryView
 from .strength_interface import StrengthInterface
 from .teaching_interface import TeachingInterface, TeachingPrompt
@@ -46,7 +47,23 @@ from .socratic_copilot import (
     CheckpointResponse,
 )
 
+# Component interfaces (from parent interfaces.py file)
+# Re-export to fix import conflicts between interfaces.py and interfaces/ package
+from ..interfaces import (
+    IGoalIngestor,
+    IScopingAgent,
+    ITimeBlockManager,
+    IStrengthAmplifier,
+    IGrowthScaffold,
+    IRewardEmitter,
+    IMomentumLoopOrchestrator,
+    IPersonalityModuleConnector,
+    IARIConnector,
+    IDashboardConnector,
+)
+
 __all__ = [
+    # User-facing interfaces
     "ProgressTapestry",
     "TapestryView",
     "StrengthInterface",
@@ -70,4 +87,15 @@ __all__ = [
     "CheckpointResponseData",
     "CheckpointType",
     "CheckpointResponse",
+    # Component interfaces
+    "IGoalIngestor",
+    "IScopingAgent",
+    "ITimeBlockManager",
+    "IStrengthAmplifier",
+    "IGrowthScaffold",
+    "IRewardEmitter",
+    "IMomentumLoopOrchestrator",
+    "IPersonalityModuleConnector",
+    "IARIConnector",
+    "IDashboardConnector",
 ]
