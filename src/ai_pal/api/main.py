@@ -423,6 +423,536 @@ async def create_5_block_plan(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ===== SOCIAL FEATURES =====
+
+@app.post("/api/social/groups", tags=["Social"])
+async def create_social_group(
+    name: str,
+    description: str,
+    is_open: bool = False,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Create a new sharing group
+
+    User-initiated group creation for win sharing.
+    """
+    ac_system = get_ac_system()
+
+    if not ac_system.ffe_engine or not hasattr(ac_system.ffe_engine, 'social_interface'):
+        raise HTTPException(status_code=503, detail="Social features not available")
+
+    try:
+        result = await ac_system.ffe_engine.social_interface.create_group(
+            user_id=user_id,
+            name=name,
+            description=description,
+            is_open=is_open
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error("Group creation failed", user_id=user_id, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/social/groups/{group_id}/join", tags=["Social"])
+async def join_social_group(
+    group_id: str,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Join an open group
+    """
+    ac_system = get_ac_system()
+
+    if not ac_system.ffe_engine or not hasattr(ac_system.ffe_engine, 'social_interface'):
+        raise HTTPException(status_code=503, detail="Social features not available")
+
+    try:
+        result = await ac_system.ffe_engine.social_interface.join_group(
+            user_id=user_id,
+            group_id=group_id
+        )
+
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("message", "Failed to join group"))
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Group join failed", group_id=group_id, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/social/groups/{group_id}/leave", tags=["Social"])
+async def leave_social_group(
+    group_id: str,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Leave a group (no pressure to stay)
+    """
+    ac_system = get_ac_system()
+
+    if not ac_system.ffe_engine or not hasattr(ac_system.ffe_engine, 'social_interface'):
+        raise HTTPException(status_code=503, detail="Social features not available")
+
+    try:
+        result = await ac_system.ffe_engine.social_interface.leave_group(
+            user_id=user_id,
+            group_id=group_id
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error("Group leave failed", group_id=group_id, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/social/groups", tags=["Social"])
+async def list_my_groups(
+    user_id: str = Depends(get_current_user)
+):
+    """
+    List all groups user is a member of
+    """
+    ac_system = get_ac_system()
+
+    if not ac_system.ffe_engine or not hasattr(ac_system.ffe_engine, 'social_interface'):
+        raise HTTPException(status_code=503, detail="Social features not available")
+
+    try:
+        groups = await ac_system.ffe_engine.social_interface.list_my_groups(user_id)
+        return {"groups": groups}
+
+    except Exception as e:
+        logger.error("Group list failed", user_id=user_id, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/social/feed/{group_id}", tags=["Social"])
+async def get_group_feed(
+    group_id: str,
+    limit: int = 20,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    View wins shared in a group
+
+    User must be a member of the group.
+    """
+    ac_system = get_ac_system()
+
+    if not ac_system.ffe_engine or not hasattr(ac_system.ffe_engine, 'social_interface'):
+        raise HTTPException(status_code=503, detail="Social features not available")
+
+    try:
+        feed = await ac_system.ffe_engine.social_interface.view_group_feed(
+            user_id=user_id,
+            group_id=group_id,
+            limit=limit
+        )
+
+        if "error" in feed:
+            raise HTTPException(status_code=404, detail=feed["error"])
+
+        return feed
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Feed retrieval failed", group_id=group_id, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class WinShareRequest(BaseModel):
+    """Request to share a win"""
+    win_id: str
+    win_description: str
+    win_type: str
+    celebration_text: str
+    selected_groups: List[str]
+    allow_encouragement: bool = True
+
+
+@app.post("/api/social/share", tags=["Social"])
+async def share_win(
+    request: WinShareRequest,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Share a win with selected groups
+
+    USER-INITIATED: User explicitly chooses to share.
+    """
+    ac_system = get_ac_system()
+
+    if not ac_system.ffe_engine or not hasattr(ac_system.ffe_engine, 'social_interface'):
+        raise HTTPException(status_code=503, detail="Social features not available")
+
+    try:
+        result = await ac_system.ffe_engine.social_interface.share_win(
+            user_id=user_id,
+            win_id=request.win_id,
+            win_description=request.win_description,
+            win_type=request.win_type,
+            celebration_text=request.celebration_text,
+            selected_groups=request.selected_groups,
+            allow_encouragement=request.allow_encouragement
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error("Win sharing failed", user_id=user_id, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class EncouragementRequest(BaseModel):
+    """Request to send encouragement"""
+    message: str
+
+
+@app.post("/api/social/encourage/{share_id}", tags=["Social"])
+async def send_encouragement(
+    share_id: str,
+    request: EncouragementRequest,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Send encouragement to someone's shared win
+    """
+    ac_system = get_ac_system()
+
+    if not ac_system.ffe_engine or not hasattr(ac_system.ffe_engine, 'social_interface'):
+        raise HTTPException(status_code=503, detail="Social features not available")
+
+    try:
+        result = await ac_system.ffe_engine.social_interface.send_encouragement(
+            from_user_id=user_id,
+            share_id=share_id,
+            message=request.message
+        )
+
+        if "error" in result:
+            raise HTTPException(status_code=404, detail=result["error"])
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Encouragement failed", share_id=share_id, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===== PERSONALITY DISCOVERY =====
+
+@app.post("/api/personality/discover/start", tags=["Personality"])
+async def start_personality_discovery(
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Start a personality discovery session
+
+    Returns first question to begin interactive assessment.
+    """
+    ac_system = get_ac_system()
+
+    if not ac_system.ffe_engine or not hasattr(ac_system.ffe_engine, 'personality_discovery'):
+        raise HTTPException(status_code=503, detail="Personality discovery not available")
+
+    try:
+        session = await ac_system.ffe_engine.personality_discovery.start_discovery_session(user_id)
+
+        return {
+            "session_id": session.session_id,
+            "stage": session.stage,
+            "message": "Let's discover your signature strengths! Answer a few questions."
+        }
+
+    except Exception as e:
+        logger.error("Discovery session start failed", user_id=user_id, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/personality/discover/{session_id}/question", tags=["Personality"])
+async def get_next_question(
+    session_id: str,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Get next discovery question
+
+    Adaptive questioning based on previous answers.
+    """
+    ac_system = get_ac_system()
+
+    if not ac_system.ffe_engine or not hasattr(ac_system.ffe_engine, 'personality_discovery'):
+        raise HTTPException(status_code=503, detail="Personality discovery not available")
+
+    try:
+        question = await ac_system.ffe_engine.personality_discovery.get_next_question(
+            session_id=session_id,
+            user_id=user_id
+        )
+
+        if not question:
+            # Session complete
+            return {
+                "complete": True,
+                "message": "Discovery session complete! View your results."
+            }
+
+        return {
+            "question_id": question.question_id,
+            "question_text": question.question_text,
+            "question_type": question.question_type.value,
+            "options": question.options if hasattr(question, 'options') else None,
+            "complete": False
+        }
+
+    except Exception as e:
+        logger.error("Question retrieval failed", session_id=session_id, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class AnswerRequest(BaseModel):
+    """Answer to discovery question"""
+    answer: Any
+
+
+@app.post("/api/personality/discover/{session_id}/answer/{question_id}", tags=["Personality"])
+async def record_answer(
+    session_id: str,
+    question_id: str,
+    request: AnswerRequest,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Record answer to discovery question
+    """
+    ac_system = get_ac_system()
+
+    if not ac_system.ffe_engine or not hasattr(ac_system.ffe_engine, 'personality_discovery'):
+        raise HTTPException(status_code=503, detail="Personality discovery not available")
+
+    try:
+        await ac_system.ffe_engine.personality_discovery.record_answer(
+            session_id=session_id,
+            user_id=user_id,
+            question_id=question_id,
+            answer=request.answer
+        )
+
+        return {
+            "success": True,
+            "message": "Answer recorded"
+        }
+
+    except Exception as e:
+        logger.error("Answer recording failed", session_id=session_id, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/personality/discover/{session_id}/complete", tags=["Personality"])
+async def complete_discovery(
+    session_id: str,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Complete discovery session and get results
+
+    Returns discovered signature strengths with confidence scores.
+    """
+    ac_system = get_ac_system()
+
+    if not ac_system.ffe_engine or not hasattr(ac_system.ffe_engine, 'personality_discovery'):
+        raise HTTPException(status_code=503, detail="Personality discovery not available")
+
+    try:
+        result = await ac_system.ffe_engine.personality_discovery.complete_session(
+            session_id=session_id,
+            user_id=user_id
+        )
+
+        return {
+            "discovered_strengths": [
+                {
+                    "type": s.strength_type.value,
+                    "label": s.identity_label,
+                    "description": s.strength_description,
+                    "confidence": s.confidence_score,
+                    "examples": s.demonstrated_examples
+                }
+                for s in result.get("strengths", [])
+            ],
+            "discovery_confidence": result.get("discovery_confidence", 0.0),
+            "summary": result.get("summary", "")
+        }
+
+    except Exception as e:
+        logger.error("Discovery completion failed", session_id=session_id, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/personality/strengths", tags=["Personality"])
+async def get_current_strengths(
+    min_confidence: float = 0.3,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Get user's current signature strengths
+
+    Includes dynamically updated confidence scores.
+    """
+    ac_system = get_ac_system()
+
+    if not ac_system.ffe_engine or not hasattr(ac_system.ffe_engine, 'personality_connector'):
+        raise HTTPException(status_code=503, detail="Personality features not available")
+
+    try:
+        strengths = await ac_system.ffe_engine.personality_connector.get_current_strengths(
+            user_id=user_id,
+            min_confidence=min_confidence
+        )
+
+        return {
+            "strengths": [
+                {
+                    "type": s.strength_type.value,
+                    "label": s.identity_label,
+                    "description": s.strength_description,
+                    "confidence": s.confidence_score,
+                    "examples": s.demonstrated_examples[-5:]  # Last 5 examples
+                }
+                for s in strengths
+            ]
+        }
+
+    except Exception as e:
+        logger.error("Strengths retrieval failed", user_id=user_id, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/personality/insights", tags=["Personality"])
+async def get_personality_insights(
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Get insights about evolving personality
+
+    Shows top strengths, emerging strengths, and trends.
+    """
+    ac_system = get_ac_system()
+
+    if not ac_system.ffe_engine or not hasattr(ac_system.ffe_engine, 'personality_connector'):
+        raise HTTPException(status_code=503, detail="Personality features not available")
+
+    try:
+        insights = await ac_system.ffe_engine.personality_connector.generate_insights(user_id)
+        return insights
+
+    except Exception as e:
+        logger.error("Insights generation failed", user_id=user_id, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===== TEACHING / PROTÉGÉ =====
+
+@app.post("/api/teaching/start", tags=["Teaching"])
+async def start_teaching_mode(
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Start teaching mode
+
+    User becomes a protégé, preparing to teach AI-PAL about their domain.
+    """
+    ac_system = get_ac_system()
+
+    if not ac_system.ffe_engine or not hasattr(ac_system.ffe_engine, 'teaching_interface'):
+        raise HTTPException(status_code=503, detail="Teaching features not available")
+
+    try:
+        result = await ac_system.ffe_engine.teaching_interface.start_teaching_mode(user_id)
+
+        return {
+            "message": "Teaching mode started! What would you like to teach me about?",
+            "teaching_session_id": result.get("session_id"),
+            "status": result.get("status")
+        }
+
+    except Exception as e:
+        logger.error("Teaching mode start failed", user_id=user_id, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class TeachingRequest(BaseModel):
+    """Teaching content submission"""
+    topic: str
+    explanation: str
+    examples: Optional[List[str]] = None
+
+
+@app.post("/api/teaching/submit", tags=["Teaching"])
+async def submit_teaching_content(
+    request: TeachingRequest,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Submit teaching content
+
+    User explains a concept or skill to AI-PAL.
+    """
+    ac_system = get_ac_system()
+
+    if not ac_system.ffe_engine or not hasattr(ac_system.ffe_engine, 'teaching_interface'):
+        raise HTTPException(status_code=503, detail="Teaching features not available")
+
+    try:
+        result = await ac_system.ffe_engine.teaching_interface.submit_teaching_content(
+            user_id=user_id,
+            topic=request.topic,
+            explanation=request.explanation,
+            examples=request.examples or []
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error("Teaching submission failed", user_id=user_id, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/teaching/taught-topics", tags=["Teaching"])
+async def get_taught_topics(
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Get all topics user has taught
+
+    Returns user's teaching history and mastery indicators.
+    """
+    ac_system = get_ac_system()
+
+    if not ac_system.ffe_engine or not hasattr(ac_system.ffe_engine, 'teaching_interface'):
+        raise HTTPException(status_code=503, detail="Teaching features not available")
+
+    try:
+        topics = await ac_system.ffe_engine.teaching_interface.get_taught_topics(user_id)
+        return {"taught_topics": topics}
+
+    except Exception as e:
+        logger.error("Taught topics retrieval failed", user_id=user_id, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ===== STARTUP/SHUTDOWN =====
 
 @app.on_event("startup")
