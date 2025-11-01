@@ -64,6 +64,11 @@ class FractalFlowEngine:
         ari_connector: Optional[ARIConnector] = None,
         dashboard_connector: Optional[DashboardConnector] = None,
         orchestrator=None,
+        # Priority 3: Advanced features (optional)
+        social_interface=None,
+        personality_discovery=None,
+        personality_connector_dynamic=None,
+        teaching_interface=None,
     ):
         """
         Initialize Fractal Flow Engine
@@ -79,6 +84,10 @@ class FractalFlowEngine:
                          - Strength Amplifier (task reframing)
                          - Reward Emitter (personalized rewards)
                          Falls back to templates if None
+            social_interface: Optional SocialInterface for win sharing (Priority 3)
+            personality_discovery: Optional PersonalityDiscoveryModule (Priority 3)
+            personality_connector_dynamic: Optional DynamicPersonalityConnector (Priority 3)
+            teaching_interface: Optional TeachingInterface for protégé pipeline (Priority 3)
         """
         self.storage_dir = storage_dir or Path("./data/ffe")
         self.storage_dir.mkdir(parents=True, exist_ok=True)
@@ -97,6 +106,12 @@ class FractalFlowEngine:
         self.personality_connector = personality_connector
         self.ari_connector = ari_connector
         self.dashboard_connector = dashboard_connector
+
+        # Priority 3: Advanced feature modules (optional)
+        self.social_interface = social_interface
+        self.personality_discovery = personality_discovery
+        self.personality_connector = personality_connector_dynamic
+        self.teaching_interface = teaching_interface
 
         # Metrics
         self.metrics = {}  # user_id -> FFEMetrics

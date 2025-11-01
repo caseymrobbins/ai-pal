@@ -25,8 +25,9 @@ from datetime import datetime
 import os
 
 # Import AI-PAL components
-from ai_pal.core.integrated_system import IntegratedACSystem, ACConfig
+from ai_pal.core.integrated_system import IntegratedACSystem, SystemConfig
 from ai_pal.monitoring import get_health_checker, get_metrics, get_logger
+from pathlib import Path
 
 # Initialize
 logger = get_logger("ai_pal.api")
@@ -56,11 +57,27 @@ def get_ac_system() -> IntegratedACSystem:
     """Get or create AC system instance"""
     global _ac_system
     if _ac_system is None:
-        config = ACConfig(
-            enable_four_gates=True,
+        # Create data directory
+        data_dir = Path(os.getenv("AI_PAL_DATA_DIR", "./data"))
+        credentials_path = Path(os.getenv("AI_PAL_CREDENTIALS", "./credentials.json"))
+
+        config = SystemConfig(
+            data_dir=data_dir,
+            credentials_path=credentials_path,
+            enable_gates=True,
+            enable_tribunal=True,
             enable_ari_monitoring=True,
             enable_edm_monitoring=True,
-            enable_ffe=True
+            enable_self_improvement=True,
+            enable_privacy_protection=True,
+            enable_context_management=True,
+            enable_model_orchestration=True,
+            enable_dashboard=True,
+            enable_ffe=True,
+            # Priority 3 features
+            enable_social_features=True,
+            enable_personality_discovery=True,
+            enable_teaching_mode=True,
         )
         _ac_system = IntegratedACSystem(config=config)
     return _ac_system

@@ -39,6 +39,14 @@ from ..ui.agency_dashboard import AgencyDashboard, DashboardSection
 from ..ffe.engine import FractalFlowEngine
 from ..ffe.integration import PersonalityModuleConnector, ARIConnector, DashboardConnector
 
+# Priority 3 imports (Advanced FFE features)
+from ..ffe.modules.social import SocialRelatednessModule
+from ..ffe.interfaces.social_interface import SocialInterface
+from ..ffe.modules.personality_discovery import PersonalityDiscoveryModule
+from ..ffe.connectors.personality_connector import DynamicPersonalityConnector
+from ..ffe.interfaces.teaching_interface import TeachingInterface
+from ..ffe.modules.protege_pipeline import ProtégéPipeline
+
 
 class RequestStage(Enum):
     """Stages of request processing"""
@@ -117,6 +125,11 @@ class SystemConfig:
 
     # Phase 5 config (FFE - Fractal Flow Engine)
     enable_ffe: bool = True
+
+    # Priority 3 config (Advanced FFE features)
+    enable_social_features: bool = True
+    enable_personality_discovery: bool = True
+    enable_teaching_mode: bool = True
 
     # Thresholds
     ari_alert_threshold: float = -0.1
@@ -246,6 +259,37 @@ class IntegratedACSystem:
                 else None
             )
 
+            # Priority 3: Advanced FFE features (optional)
+            social_interface = None
+            personality_discovery = None
+            personality_connector_dynamic = None
+            teaching_interface = None
+
+            if config.enable_social_features:
+                # Create social module and interface
+                social_module = SocialRelatednessModule()
+                social_interface = SocialInterface(social_module)
+                logger.info("Social features enabled")
+
+            if config.enable_personality_discovery:
+                # Create personality discovery and dynamic connector
+                personality_discovery = PersonalityDiscoveryModule(
+                    orchestrator=self.orchestrator
+                )
+                personality_connector_dynamic = DynamicPersonalityConnector(
+                    personality_discovery=personality_discovery
+                )
+                logger.info("Personality discovery enabled")
+
+            if config.enable_teaching_mode:
+                # Create teaching interface with protégé pipeline
+                protege_pipeline = ProtégéPipeline()
+                teaching_interface = TeachingInterface(
+                    pipeline=protege_pipeline,
+                    orchestrator=self.orchestrator
+                )
+                logger.info("Teaching mode enabled")
+
             # Initialize FFE with connectors and orchestrator for AI-powered components
             self.ffe_engine = FractalFlowEngine(
                 storage_dir=config.data_dir / "ffe",
@@ -253,6 +297,11 @@ class IntegratedACSystem:
                 ari_connector=ari_connector,
                 dashboard_connector=dashboard_connector,
                 orchestrator=self.orchestrator,  # Enable AI-powered FFE components
+                # Priority 3: Advanced features
+                social_interface=social_interface,
+                personality_discovery=personality_discovery,
+                personality_connector_dynamic=personality_connector_dynamic,
+                teaching_interface=teaching_interface,
             )
 
         logger.info("Integrated AC-AI System initialized successfully")
@@ -267,6 +316,12 @@ class IntegratedACSystem:
             f"Orchestration={config.enable_model_orchestration}, Dashboard={config.enable_dashboard}"
         )
         logger.info(f"Phase 5: FFE={config.enable_ffe}")
+        if config.enable_ffe:
+            logger.info(
+                f"Priority 3: Social={config.enable_social_features}, "
+                f"Personality={config.enable_personality_discovery}, "
+                f"Teaching={config.enable_teaching_mode}"
+            )
 
     async def process_request(
         self,
