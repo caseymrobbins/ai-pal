@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-pal
+  labels:
+    name: ai-pal
+    environment: production

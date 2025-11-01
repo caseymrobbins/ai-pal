@@ -1,0 +1,102 @@
+# Ingress configuration for AI-PAL
+# Requires an Ingress Controller (e.g., nginx-ingress, traefik)
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ai-pal-ingress
+  namespace: ai-pal
+  annotations:
+    # Nginx Ingress Controller annotations
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-connections: "100"
+
+    # Timeouts for long-running AI requests
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+
+    # Request body size (for file uploads)
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+
+    # CORS (if needed for web frontend)
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://your-domain.com"
+
+    # TLS/SSL via cert-manager (optional)
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Strict-Transport-Security: max-age=31536000; includeSubDomains";
+
+spec:
+  ingressClassName: nginx
+
+  tls:
+  - hosts:
+    - ai-pal.your-domain.com
+    secretName: ai-pal-tls-cert  # Certificate managed by cert-manager or manual
+
+  rules:
+  - host: ai-pal.your-domain.com
+    http:
+      paths:
+      # Main API
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: ai-pal-service
+            port:
+              number: 80
+
+      # Health check endpoint (bypass rate limiting)
+      - path: /health
+        pathType: Exact
+        backend:
+          service:
+            name: ai-pal-service
+            port:
+              number: 80
+
+      # Metrics endpoint (restricted access recommended)
+      - path: /metrics
+        pathType: Exact
+        backend:
+          service:
+            name: ai-pal-service
+            port:
+              number: 80
+
+---
+# Optional: Separate ingress for internal services (monitoring)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ai-pal-monitoring-ingress
+  namespace: ai-pal
+  annotations:
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: monitoring-basic-auth
+    nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: monitoring.ai-pal.your-domain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: ai-pal-service
+            port:
+              number: 80

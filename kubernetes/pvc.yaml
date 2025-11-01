@@ -1,0 +1,57 @@
+# Persistent Volume Claims for AI-PAL application
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ai-pal-data-pvc
+  namespace: ai-pal
+spec:
+  accessModes:
+  - ReadWriteMany  # Multiple pods can read/write
+  resources:
+    requests:
+      storage: 20Gi
+  # storageClassName: fast-ssd  # Uncomment and specify your storage class
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ai-pal-logs-pvc
+  namespace: ai-pal
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi
+  # storageClassName: standard
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ai-pal-models-pvc
+  namespace: ai-pal
+spec:
+  accessModes:
+  - ReadWriteMany  # Models can be shared across pods
+  resources:
+    requests:
+      storage: 50Gi  # Local models can be large
+  # storageClassName: fast-ssd  # Fast storage for model loading
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-pvc
+  namespace: ai-pal
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  # storageClassName: fast-ssd
