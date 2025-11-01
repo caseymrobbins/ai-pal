@@ -51,6 +51,10 @@ class LLMRouter:
             TaskComplexity.COMPLEX: "anthropic",
             TaskComplexity.EXPERT: "anthropic",
         }
+        # Compatibility: Old orchestrator expects these attributes
+        self.local_provider = None
+        self.anthropic_provider = None
+        self.openai_provider = None
 
     def route(
         self,
