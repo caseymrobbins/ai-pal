@@ -100,23 +100,16 @@ def status():
     # User stats
     if system.ari_monitor:
         console.print("\n[bold]Your Agency Score:[/bold]")
-
-        # Get latest ARI snapshot
-        snapshots = system.ari_monitor.get_user_history(user_id, limit=1)
-        if snapshots:
-            latest = snapshots[0]
-            ari_score = latest.autonomy_retention
-
-            # Color based on score
-            if ari_score >= 0.7:
-                color = "green"
-            elif ari_score >= 0.5:
-                color = "yellow"
+        try:
+            summary = system.ari_monitor.get_user_summary(user_id)
+            if summary and 'snapshot_count' in summary and summary['snapshot_count'] > 0:
+                # Have ARI data
+                console.print(f"  Snapshots recorded: {summary['snapshot_count']}")
+                console.print("  [dim]Use 'ai-pal ari' for detailed history[/dim]")
             else:
-                color = "red"
-
-            console.print(f"  ARI Score: [{color}]{ari_score:.2%}[/{color}] ({latest.trend})")
-            console.print(f"  Total interactions: {latest.total_interactions}")
+                console.print("  [dim]No data yet. Start using AI-PAL to track your autonomy![/dim]")
+        except Exception as e:
+            console.print(f"  [dim]ARI tracking ready[/dim]")
 
     # FFE stats
     if system.ffe_engine:
@@ -247,37 +240,33 @@ def ari():
         border_style="cyan"
     ))
 
-    # Get history
-    snapshots = system.ari_monitor.get_user_history(user_id, limit=10)
+    # Get user summary
+    try:
+        summary = system.ari_monitor.get_user_summary(user_id)
 
-    if not snapshots:
-        console.print("\n[yellow]No ARI data yet. Start using AI-PAL to build your history![/yellow]")
-        return
+        if not summary or summary.get('snapshot_count', 0) == 0:
+            console.print("\n[yellow]No ARI data yet. Start using AI-PAL to build your history![/yellow]")
+            return
 
-    # Create table
-    table = Table(title="ARI History (Last 10 interactions)")
-    table.add_column("Date", style="cyan")
-    table.add_column("ARI Score", justify="right", style="white")
-    table.add_column("Trend", style="yellow")
-    table.add_column("Interactions", justify="right", style="dim")
+        # Show summary
+        console.print("\n[bold]Summary:[/bold]")
+        console.print(f"  Total snapshots: {summary.get('snapshot_count', 0)}")
 
-    for snapshot in reversed(snapshots):
-        # Color based on score
-        if snapshot.autonomy_retention >= 0.7:
-            score_color = "green"
-        elif snapshot.autonomy_retention >= 0.5:
-            score_color = "yellow"
-        else:
-            score_color = "red"
+        if 'latest_score' in summary:
+            score = summary['latest_score']
+            if score >= 0.7:
+                color = "green"
+            elif score >= 0.5:
+                color = "yellow"
+            else:
+                color = "red"
+            console.print(f"  Latest ARI: [{color}]{score:.2%}[/{color}]")
 
-        table.add_row(
-            snapshot.timestamp.strftime("%Y-%m-%d %H:%M"),
-            f"[{score_color}]{snapshot.autonomy_retention:.2%}[/{score_color}]",
-            snapshot.trend,
-            str(snapshot.total_interactions)
-        )
+        console.print("\n[dim]ARI tracking is active. Continue using AI-PAL to see your autonomy trends.[/dim]")
 
-    console.print(table)
+    except Exception as e:
+        console.print(f"\n[yellow]Error retrieving ARI history: {e}[/yellow]")
+        console.print("[dim]Try interacting with AI-PAL to generate data.[/dim]")
 
 
 # ===== PERSONALITY COMMANDS =====
