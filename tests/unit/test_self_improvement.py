@@ -405,7 +405,8 @@ async def test_ab_test_timeout(
 
     # Should be completed (timed out)
     updated_test = improvement_loop.ab_tests[test.test_id]
-    assert updated_test.status in [ABTestStatus.COMPLETED, ABTestStatus.INCONCLUSIVE]
+    # ABTestStatus enum values are: RUNNING, COMPLETED, CANCELLED
+    assert updated_test.status == ABTestStatus.COMPLETED
 
 
 # ============================================================================
@@ -422,6 +423,7 @@ async def test_record_performance_metric(improvement_loop, sample_component):
         component=sample_component,
         success=True,
         latency_ms=150.0,
+        cost=0.01,  # Required parameter
         user_satisfaction=0.85,
         gate_violation=False,
         ari_alert=False
@@ -443,16 +445,16 @@ async def test_get_performance_metrics(improvement_loop, sample_component):
             component=sample_component,
             success=i % 5 != 0,  # 80% success rate
             latency_ms=100.0 + i * 5,  # Varying latency
+            cost=0.01 + i * 0.001,  # Required parameter
             user_satisfaction=0.7 + (i % 10) * 0.02,
             gate_violation=i % 10 == 0,  # 10% violation rate
             ari_alert=i % 20 == 0  # 5% alert rate
         )
 
-    # Get metrics for last hour
+    # Get metrics for last hour - correct parameter name
     metrics = await improvement_loop.get_performance_metrics(
         component=sample_component,
-        period_start=now - timedelta(hours=1),
-        period_end=now + timedelta(minutes=5)
+        period_hours=1
     )
 
     assert metrics is not None
@@ -480,14 +482,14 @@ async def test_performance_percentiles(improvement_loop, sample_component):
             component=sample_component,
             success=True,
             latency_ms=latency,
+            cost=0.01,  # Required parameter
             user_satisfaction=0.8
         )
 
-    # Get metrics
+    # Get metrics - correct parameter name
     metrics = await improvement_loop.get_performance_metrics(
         component=sample_component,
-        period_start=now - timedelta(hours=1),
-        period_end=now + timedelta(minutes=5)
+        period_hours=1
     )
 
     # Check percentiles
@@ -666,7 +668,8 @@ async def test_record_sample_for_nonexistent_test(improvement_loop):
             test_id="nonexistent",
             variant_id="nonexistent",
             success=True,
-            latency_ms=100.0
+            latency_ms=100.0,
+            cost=0.01
         )
 
 

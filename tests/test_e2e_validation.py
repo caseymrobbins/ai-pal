@@ -112,7 +112,7 @@ class TestEndToEndIntegration:
         session_id = "test_session_001"
 
         # Add a memory
-        memory_id = await system.context_manager.add_memory(
+        memory = await system.context_manager.store_memory(
             user_id=user_id,
             session_id=session_id,
             content="User prefers concise explanations over verbose ones",
@@ -120,7 +120,7 @@ class TestEndToEndIntegration:
             tags={"communication", "style"}
         )
 
-        print(f"✓ Memory added: {memory_id}")
+        print(f"✓ Memory added: {memory.memory_id}")
 
         # Retrieve memories
         memories = system.context_manager.memories.get(user_id, [])
@@ -146,11 +146,11 @@ class TestEndToEndIntegration:
         text_with_pii = "My email is john.doe@example.com and phone is 555-123-4567"
 
         # Detect PII
-        detections = system.privacy_manager.detect_pii(text_with_pii)
+        detections = await system.privacy_manager.detect_pii(text_with_pii)
         print(f"✓ Detected {len(detections)} PII instances")
 
         for detection in detections:
-            print(f"  - {detection.pii_type.value}: '{detection.text}' (confidence: {detection.confidence:.2f})")
+            print(f"  - {detection.pii_type.value}: '{detection.detected_value}' (confidence: {detection.confidence:.2f})")
 
         assert len(detections) > 0, "Should detect email and phone number"
 
@@ -163,17 +163,24 @@ class TestEndToEndIntegration:
 
         user_id = "test_user"
 
-        # Record an interaction
-        system.ari_monitor.record_interaction(
+        # Record a snapshot
+        from ai_pal.monitoring.ari_monitor import AgencySnapshot, AgencyLevel
+        snapshot = AgencySnapshot(
             user_id=user_id,
-            action_type="AI provides answer",
-            skill_before=0.5,
-            skill_after=0.55,
-            user_agency_exercised=0.7,
-            ai_reliance=0.3
+            timestamp=datetime.now(),
+            delta_agency=0.7,
+            agency_level=AgencyLevel.GROWING,
+            decision_agency=0.7,
+            learning_agency=0.6,
+            momentum_agency=0.8,
+            engagement_score=0.75,
+            skill_growth=0.05,
+            ai_dependency=0.3
         )
 
-        print("✓ Interaction recorded")
+        await system.ari_monitor.record_snapshot(snapshot)
+
+        print("✓ Snapshot recorded")
 
         # Generate report
         from datetime import timedelta
@@ -182,9 +189,8 @@ class TestEndToEndIntegration:
 
         report = system.ari_monitor.generate_report(user_id, start_date, end_date)
         print(f"✓ ARI Report generated:")
-        print(f"  - Agency trend: {report.agency_trend.value}")
-        print(f"  - Skill trend: {report.skill_trend}")
-        print(f"  - Dependency trend: {report.dependency_trend}")
+        print(f"  - User ID: {report.user_id}")
+        print(f"  - Period: {report.period_start} to {report.period_end}")
 
     @pytest.mark.asyncio
     async def test_aho_tribunal_workflow(self, e2e_system):
@@ -254,18 +260,18 @@ class TestEndToEndIntegration:
         print(f"\n1. User request received: '{user_request[:50]}...'")
 
         # 2. Privacy filtering
-        pii_detections = system.privacy_manager.detect_pii(user_request)
+        pii_detections = await system.privacy_manager.detect_pii(user_request)
         print(f"2. Privacy scan: {len(pii_detections)} PII detected")
 
         # 3. Store in context
-        memory_id = await system.context_manager.add_memory(
+        memory = await system.context_manager.store_memory(
             user_id=user_id,
             session_id=session_id,
             content="User requested calendar organization help",
-            memory_type=MemoryType.INTERACTION,
+            memory_type=MemoryType.CONVERSATION,
             tags={"request", "calendar"}
         )
-        print(f"3. Context stored: {memory_id}")
+        print(f"3. Context stored: {memory.memory_id}")
 
         # 4. Check gates for proposed action
         proposed_action = {
@@ -281,16 +287,22 @@ class TestEndToEndIntegration:
         passed_gates = sum(1 for r in gate_results.values() if r.passed)
         print(f"4. Gate validation: {passed_gates}/4 gates passed")
 
-        # 5. Record interaction for ARI
-        system.ari_monitor.record_interaction(
+        # 5. Record snapshot for ARI
+        from ai_pal.monitoring.ari_monitor import AgencySnapshot, AgencyLevel
+        snapshot = AgencySnapshot(
             user_id=user_id,
-            action_type="assistance_provided",
-            skill_before=0.5,
-            skill_after=0.52,
-            user_agency_exercised=0.8,
-            ai_reliance=0.2
+            timestamp=datetime.now(),
+            delta_agency=0.8,
+            agency_level=AgencyLevel.GROWING,
+            decision_agency=0.8,
+            learning_agency=0.7,
+            momentum_agency=0.9,
+            engagement_score=0.8,
+            skill_growth=0.02,
+            ai_dependency=0.2
         )
-        print(f"5. ARI monitoring: interaction recorded")
+        await system.ari_monitor.record_snapshot(snapshot)
+        print(f"5. ARI monitoring: snapshot recorded")
 
         # 6. Generate dashboard
         dashboard = await system.dashboard.generate_dashboard(user_id, period_days=1)

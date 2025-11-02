@@ -28,11 +28,12 @@ def orchestrator():
 async def test_select_local_model_for_simple_task(orchestrator):
     """Test that simple tasks select local model"""
     requirements = TaskRequirements(
-        task_complexity=TaskComplexity.SIMPLE,
-        min_reasoning_capability=0.6,
-        max_cost_per_1k_tokens=0.0,  # Free
+        task_type="simple_task",
+        complexity=TaskComplexity.SIMPLE,
+        min_quality=0.6,
+        max_cost=0.0,  # Free
         max_latency_ms=1000,
-        requires_local_execution=True
+        requires_local=True
     )
 
     selection = await orchestrator.select_model(
@@ -49,11 +50,12 @@ async def test_select_local_model_for_simple_task(orchestrator):
 async def test_select_gpt4_for_complex_task(orchestrator):
     """Test that complex tasks select powerful model"""
     requirements = TaskRequirements(
-        task_complexity=TaskComplexity.COMPLEX,
-        min_reasoning_capability=0.9,
-        max_cost_per_1k_tokens=0.1,
+        task_type="complex_task",
+        complexity=TaskComplexity.COMPLEX,
+        min_quality=0.9,
+        max_cost=10.0,
         max_latency_ms=5000,
-        requires_local_execution=False
+        requires_local=False
     )
 
     selection = await orchestrator.select_model(
@@ -70,11 +72,12 @@ async def test_select_gpt4_for_complex_task(orchestrator):
 async def test_cost_optimization(orchestrator):
     """Test cost-optimized model selection"""
     requirements = TaskRequirements(
-        task_complexity=TaskComplexity.MODERATE,
-        min_reasoning_capability=0.7,
-        max_cost_per_1k_tokens=0.01,
+        task_type="moderate_task",
+        complexity=TaskComplexity.MODERATE,
+        min_quality=0.7,
+        max_cost=1.0,
         max_latency_ms=3000,
-        requires_local_execution=False
+        requires_local=False
     )
 
     selection = await orchestrator.select_model(
@@ -91,11 +94,12 @@ async def test_cost_optimization(orchestrator):
 async def test_latency_optimization(orchestrator):
     """Test latency-optimized model selection"""
     requirements = TaskRequirements(
-        task_complexity=TaskComplexity.MODERATE,
-        min_reasoning_capability=0.7,
-        max_cost_per_1k_tokens=0.1,
+        task_type="moderate_task",
+        complexity=TaskComplexity.MODERATE,
+        min_quality=0.7,
+        max_cost=10.0,
         max_latency_ms=1000,
-        requires_local_execution=False
+        requires_local=False
     )
 
     selection = await orchestrator.select_model(
@@ -112,11 +116,12 @@ async def test_latency_optimization(orchestrator):
 async def test_privacy_optimization(orchestrator):
     """Test privacy-optimized model selection"""
     requirements = TaskRequirements(
-        task_complexity=TaskComplexity.MODERATE,
-        min_reasoning_capability=0.7,
-        max_cost_per_1k_tokens=0.1,
+        task_type="moderate_task",
+        complexity=TaskComplexity.MODERATE,
+        min_quality=0.7,
+        max_cost=10.0,
         max_latency_ms=3000,
-        requires_local_execution=True  # Privacy requires local
+        requires_local=True  # Privacy requires local
     )
 
     selection = await orchestrator.select_model(
@@ -132,11 +137,12 @@ async def test_privacy_optimization(orchestrator):
 async def test_balanced_optimization(orchestrator):
     """Test balanced model selection"""
     requirements = TaskRequirements(
-        task_complexity=TaskComplexity.MODERATE,
-        min_reasoning_capability=0.75,
-        max_cost_per_1k_tokens=0.05,
+        task_type="moderate_task",
+        complexity=TaskComplexity.MODERATE,
+        min_quality=0.75,
+        max_cost=5.0,
         max_latency_ms=3000,
-        requires_local_execution=False
+        requires_local=False
     )
 
     selection = await orchestrator.select_model(
@@ -153,11 +159,12 @@ async def test_balanced_optimization(orchestrator):
 async def test_fallback_models(orchestrator):
     """Test that fallback models are provided"""
     requirements = TaskRequirements(
-        task_complexity=TaskComplexity.MODERATE,
-        min_reasoning_capability=0.7,
-        max_cost_per_1k_tokens=0.1,
+        task_type="moderate_task",
+        complexity=TaskComplexity.MODERATE,
+        min_quality=0.7,
+        max_cost=10.0,
         max_latency_ms=3000,
-        requires_local_execution=False
+        requires_local=False
     )
 
     selection = await orchestrator.select_model(requirements)
@@ -226,11 +233,12 @@ async def test_performance_adjustment(orchestrator):
 
     # Now try to select this model
     requirements = TaskRequirements(
-        task_complexity=TaskComplexity.SIMPLE,
-        min_reasoning_capability=0.7,
-        max_cost_per_1k_tokens=0.1,
+        task_type="simple_task",
+        complexity=TaskComplexity.SIMPLE,
+        min_quality=0.7,
+        max_cost=10.0,
         max_latency_ms=3000,
-        requires_local_execution=False
+        requires_local=False
     )
 
     selection = await orchestrator.select_model(requirements)
@@ -244,11 +252,12 @@ async def test_performance_adjustment(orchestrator):
 async def test_no_models_meet_requirements(orchestrator):
     """Test handling when no models meet requirements"""
     requirements = TaskRequirements(
-        task_complexity=TaskComplexity.EXPERT,
-        min_reasoning_capability=1.5,  # Impossible requirement
-        max_cost_per_1k_tokens=0.0,
+        task_type="expert_task",
+        complexity=TaskComplexity.EXPERT,
+        min_quality=1.5,  # Impossible requirement
+        max_cost=0.0,
         max_latency_ms=100,
-        requires_local_execution=True
+        requires_local=True
     )
 
     # Should still return best effort model
@@ -314,11 +323,12 @@ def test_model_provider_enum():
 async def test_code_generation_task(orchestrator):
     """Test model selection for code generation"""
     requirements = TaskRequirements(
-        task_complexity=TaskComplexity.MODERATE,
-        min_reasoning_capability=0.8,
-        max_cost_per_1k_tokens=0.05,
+        task_type="code_generation",
+        complexity=TaskComplexity.MODERATE,
+        min_quality=0.8,
+        max_cost=5.0,
         max_latency_ms=3000,
-        requires_local_execution=False
+        requires_local=False
     )
 
     selection = await orchestrator.select_model(
@@ -334,11 +344,12 @@ async def test_code_generation_task(orchestrator):
 async def test_data_analysis_task(orchestrator):
     """Test model selection for data analysis"""
     requirements = TaskRequirements(
-        task_complexity=TaskComplexity.COMPLEX,
-        min_reasoning_capability=0.85,
-        max_cost_per_1k_tokens=0.1,
+        task_type="data_analysis",
+        complexity=TaskComplexity.COMPLEX,
+        min_quality=0.85,
+        max_cost=10.0,
         max_latency_ms=5000,
-        requires_local_execution=False
+        requires_local=False
     )
 
     selection = await orchestrator.select_model(

@@ -281,8 +281,8 @@ async def test_resolve_debt(edm_monitor):
         resolution_method="citation_added",
     )
 
-    # Verify debt is resolved
-    resolved_debt = await edm_monitor.get_debt(debt.debt_id)
+    # Verify debt is resolved - direct dict access
+    resolved_debt = edm_monitor.debt_instances[debt.debt_id]
     assert resolved_debt.resolved is True
     assert resolved_debt.resolution_method == "citation_added"
 
@@ -309,11 +309,11 @@ async def test_generate_report(edm_monitor):
             user_id="test-user",
         )
 
-    # Generate report
-    report = await edm_monitor.generate_report(
+    # Generate report - correct parameter names
+    report = edm_monitor.generate_report(
         user_id="test-user",
-        period_start=datetime.now() - timedelta(days=1),
-        period_end=datetime.now() + timedelta(hours=1),
+        start_date=datetime.now() - timedelta(days=1),
+        end_date=datetime.now() + timedelta(hours=1),
     )
 
     assert report is not None
@@ -393,8 +393,8 @@ async def test_debt_persistence(edm_monitor):
         fact_check_enabled=False,
     )
 
-    # Should be able to retrieve debt
-    retrieved_debt = await new_monitor.get_debt(debt_id)
+    # Should be able to retrieve debt - direct dict access
+    retrieved_debt = new_monitor.debt_instances.get(debt_id)
     assert retrieved_debt is not None
     assert retrieved_debt.debt_id == debt_id
 
