@@ -131,6 +131,9 @@ Learn your preferences while respecting privacy:
 - (Optional) CUDA-compatible GPU for local model acceleration
 - 8GB+ RAM (16GB+ recommended for larger local models)
 
+### Easy Windows Install
+Read [https://github.com/caseymrobbins/ai-pal/edit/main/README.md)](https://github.com/caseymrobbins/ai-pal/blob/main/easy_windows_install.md)
+
 ### Quick Start
 
 ```bash
