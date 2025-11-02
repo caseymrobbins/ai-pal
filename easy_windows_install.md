@@ -4,25 +4,31 @@ This method uses a PowerShell script to install all dependencies (Git, Docker De
 
 ### Installation
 
-1.  Open Windows PowerShell **as Administrator**.
-2.  You may need to allow scripts to run in your current session. You can do this by typing the following command and pressing Enter:
+1.  Download the installer script:
+    * **[Install_AI_Pal_App.ps1](https://raw.githubusercontent.com/caseymrobbins/ai-pal/refs/heads/main/Install_AI_Pal_App.ps1)**
+    * **Important:** Right-click that link and select **"Save as..."** or **"Save link as..."** to download the `Install_AI_Pal_App.ps1` file.
+
+2.  Open Windows PowerShell **as Administrator**.
+    * Find PowerShell in your Start menu, right-click it, and choose "Run as administrator".
+
+3.  You may need to allow scripts to run in your current session. You can do this by typing the following command and pressing Enter:
     ```powershell
     Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
     ```
-3.  Navigate to the directory where you downloaded the `Install_AI_Pal_App.ps1` script. For example:
+4.  Navigate to the directory where you saved the `Install_AI_Pal_App.ps1` script. For example, if you saved it to your Downloads folder:
     ```powershell
     cd C:\Users\YourUser\Downloads
     ```
-4.  Run the installer script:
+5.  Run the installer script:
     ```powershell
     .\Install_AI_Pal_App.ps1
     ```
-5.  Press **Enter** to continue when prompted.
-6.  You **must** approve all User Account Control (UAC) prompts that appear for installing Git, Docker, and Python.
-7.  The script will pause to refresh your system's path after installing the prerequisites.
-8.  When prompted, enter your `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`. You can press Enter to skip either key if you don't have one.
-9.  The script will automatically clone the repository, set up the configuration file, and create a new "AI-Pal" shortcut on your desktop.
-10. **CRITICAL:** Once the script shows "Part 1 Complete! REBOOT REQUIRED", you **must reboot your computer** for the Docker installation to finalize.
+6.  Press **Enter** to continue when prompted.
+7.  You **must** approve all User Account Control (UAC) prompts that appear for installing Git, Docker, and Python.
+8.  The script will pause to refresh your system's path after installing the prerequisites.
+9.  When prompted, enter your `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`. You can press Enter to skip either key if you don't have one.
+10. The script will automatically clone the repository, set up the configuration file, and create a new "AI-Pal" shortcut on your desktop.
+11. **CRITICAL:** Once the script shows "Part 1 Complete! REBOOT REQUIRED", you **must reboot your computer** for the Docker installation to finalize.
 
 ### How to Start AI-Pal
 
