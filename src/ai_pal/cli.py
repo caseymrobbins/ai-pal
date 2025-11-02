@@ -301,8 +301,7 @@ def personality_discover():
         while questions_answered < max_questions:
             # Get next question
             question = await system.ffe_engine.personality_discovery.get_next_question(
-                session.session_id,
-                user_id
+                session.session_id
             )
 
             if not question:
