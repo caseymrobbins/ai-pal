@@ -166,11 +166,12 @@ async def test_epistemic_debt_detection(integrated_system):
 async def test_model_selection(integrated_system):
     """Test that appropriate model is selected"""
     requirements = TaskRequirements(
-        task_complexity=TaskComplexity.SIMPLE,
-        min_reasoning_capability=0.6,
-        max_cost_per_1k_tokens=0.0,
+        task_type="calculation",
+        complexity=TaskComplexity.SIMPLE,
+        min_quality=0.6,
+        max_cost=0.0,
         max_latency_ms=1000,
-        requires_local_execution=True
+        requires_local=True
     )
 
     result = await integrated_system.process_request(
@@ -252,7 +253,7 @@ async def test_privacy_budget_enforcement(integrated_system):
 
     # Set consent with low budget
     from ai_pal.privacy.advanced_privacy import ConsentLevel
-    await privacy_manager.set_consent(user_id, ConsentLevel.MINIMAL)
+    await privacy_manager.record_consent(user_id, ConsentLevel.MINIMAL)
 
     # Exhaust budget
     budget = privacy_manager.privacy_budgets[user_id]
@@ -279,8 +280,9 @@ async def test_context_retrieval(integrated_system):
 
     # Store some context
     from ai_pal.context.enhanced_context import MemoryType, MemoryPriority
-    await integrated_system.context_manager.add_memory(
+    await integrated_system.context_manager.store_memory(
         user_id=user_id,
+        session_id="session_1",
         content="User prefers Python programming language",
         memory_type=MemoryType.PREFERENCE,
         priority=MemoryPriority.HIGH,

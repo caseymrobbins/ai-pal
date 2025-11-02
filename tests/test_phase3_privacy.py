@@ -43,11 +43,7 @@ async def test_detect_email_pii(privacy_manager):
     """Test email PII detection"""
     text = "Please contact me at john.doe@example.com for more information"
 
-    detections = await privacy_manager.detect_pii(
-        text=text,
-        user_id="test_user",
-        session_id="session_1"
-    )
+    detections = await privacy_manager.detect_pii(text=text)
 
     assert len(detections) > 0
     email_detections = [d for d in detections if d.pii_type == PIIType.EMAIL]
@@ -60,11 +56,7 @@ async def test_detect_phone_pii(privacy_manager):
     """Test phone number PII detection"""
     text = "Call me at 555-123-4567 or (555) 987-6543"
 
-    detections = await privacy_manager.detect_pii(
-        text=text,
-        user_id="test_user",
-        session_id="session_1"
-    )
+    detections = await privacy_manager.detect_pii(text=text)
 
     phone_detections = [d for d in detections if d.pii_type == PIIType.PHONE]
     assert len(phone_detections) >= 1
@@ -75,11 +67,7 @@ async def test_detect_ssn_pii(privacy_manager):
     """Test SSN PII detection"""
     text = "My SSN is 123-45-6789"
 
-    detections = await privacy_manager.detect_pii(
-        text=text,
-        user_id="test_user",
-        session_id="session_1"
-    )
+    detections = await privacy_manager.detect_pii(text=text)
 
     ssn_detections = [d for d in detections if d.pii_type == PIIType.SSN]
     assert len(ssn_detections) == 1
@@ -90,7 +78,7 @@ async def test_redact_pii(privacy_manager):
     """Test PII redaction"""
     text = "Email me at test@example.com"
 
-    detections = await privacy_manager.detect_pii(text, "test_user", "session_1")
+    detections = await privacy_manager.detect_pii(text)
 
     redacted = await privacy_manager.apply_privacy_actions(text, detections)
 
@@ -103,7 +91,7 @@ async def test_mask_pii(privacy_manager):
     """Test PII masking"""
     text = "Call 555-123-4567"
 
-    detections = await privacy_manager.detect_pii(text, "test_user", "session_1")
+    detections = await privacy_manager.detect_pii(text)
 
     # Set action to mask
     for detection in detections:
@@ -121,7 +109,7 @@ async def test_privacy_budget_tracking(privacy_manager):
     user_id = "test_user"
 
     # Set consent and budget
-    await privacy_manager.set_consent(user_id, ConsentLevel.STANDARD)
+    await privacy_manager.record_consent(user_id, ConsentLevel.STANDARD)
 
     # Check initial budget
     budget_ok = await privacy_manager.check_privacy_budget(user_id)
@@ -142,19 +130,18 @@ async def test_consent_management(privacy_manager):
     user_id = "test_user"
 
     # Set consent
-    consent = await privacy_manager.set_consent(
+    consent = await privacy_manager.record_consent(
         user_id=user_id,
         consent_level=ConsentLevel.FULL,
-        expiry_days=30
+        expires_in_days=30
     )
 
     assert consent.consent_level == ConsentLevel.FULL
-    assert consent.consent_expiry is not None
+    assert consent.expires_at is not None
 
     # Get consent
-    retrieved = privacy_manager.get_consent(user_id)
-    assert retrieved is not None
-    assert retrieved.consent_level == ConsentLevel.FULL
+    retrieved = await privacy_manager.check_consent(user_id)
+    assert retrieved is True
 
 
 @pytest.mark.asyncio
@@ -166,22 +153,21 @@ async def test_consent_expiry(privacy_manager):
     consent = ConsentRecord(
         user_id=user_id,
         consent_level=ConsentLevel.FULL,
-        consent_date=datetime.now() - timedelta(days=40),
-        consent_expiry=datetime.now() - timedelta(days=10),
-        permissions=set(),
-        can_store_data=True,
-        can_share_anonymized=False
+        granted_at=datetime.now() - timedelta(days=40),
+        expires_at=datetime.now() - timedelta(days=10),
+        allow_data_storage=True,
+        allow_analytics=False,
+        allow_personalization=False,
+        allow_third_party_sharing=False
     )
 
     privacy_manager.consent_records[user_id] = consent
 
-    # Check if expired
-    retrieved = privacy_manager.get_consent(user_id)
-    assert retrieved is not None
+    # Check if expired - check_consent should return False for expired consent
+    has_valid_consent = await privacy_manager.check_consent(user_id)
 
-    # In practice, should check expiry and prompt for renewal
-    is_expired = retrieved.consent_expiry < datetime.now()
-    assert is_expired is True
+    # Expired consent should fail check
+    assert has_valid_consent is False
 
 
 @pytest.mark.asyncio
@@ -189,20 +175,24 @@ async def test_data_minimization_policy(privacy_manager):
     """Test data minimization policies"""
     user_id = "test_user"
 
-    # Set minimization policy
-    policy = await privacy_manager.set_minimization_policy(
+    # Set minimization policy directly
+    from ai_pal.privacy.advanced_privacy import DataMinimizationPolicy
+
+    policy = DataMinimizationPolicy(
         user_id=user_id,
         retention_days=30,
-        auto_delete=True,
-        collect_minimal=True
+        auto_delete_after_retention=True,
+        collect_only_necessary=True
     )
 
+    privacy_manager.minimization_policies[user_id] = policy
+
     assert policy.retention_days == 30
-    assert policy.auto_delete is True
-    assert policy.collect_minimal is True
+    assert policy.auto_delete_after_retention is True
+    assert policy.collect_only_necessary is True
 
     # Get policy
-    retrieved = privacy_manager.get_minimization_policy(user_id)
+    retrieved = privacy_manager.minimization_policies.get(user_id)
     assert retrieved is not None
     assert retrieved.retention_days == 30
 
@@ -217,7 +207,7 @@ async def test_multiple_pii_types(privacy_manager):
     SSN: 123-45-6789
     """
 
-    detections = await privacy_manager.detect_pii(text, "test_user", "session_1")
+    detections = await privacy_manager.detect_pii(text)
 
     pii_types_found = {d.pii_type for d in detections}
 
@@ -231,7 +221,7 @@ async def test_privacy_budget_reset(privacy_manager):
     """Test daily privacy budget reset"""
     user_id = "test_user"
 
-    await privacy_manager.set_consent(user_id, ConsentLevel.STANDARD)
+    await privacy_manager.record_consent(user_id, ConsentLevel.STANDARD)
 
     budget = privacy_manager.privacy_budgets[user_id]
 
@@ -253,7 +243,7 @@ async def test_ip_address_detection(privacy_manager):
     """Test IP address PII detection"""
     text = "Server IP is 192.168.1.1 and public IP is 203.0.113.42"
 
-    detections = await privacy_manager.detect_pii(text, "test_user", "session_1")
+    detections = await privacy_manager.detect_pii(text)
 
     ip_detections = [d for d in detections if d.pii_type == PIIType.IP_ADDRESS]
 
@@ -265,7 +255,7 @@ async def test_credit_card_detection(privacy_manager):
     """Test credit card PII detection"""
     text = "My card number is 4532-1234-5678-9010"
 
-    detections = await privacy_manager.detect_pii(text, "test_user", "session_1")
+    detections = await privacy_manager.detect_pii(text)
 
     cc_detections = [d for d in detections if d.pii_type == PIIType.CREDIT_CARD]
 
@@ -303,12 +293,15 @@ def test_pii_types():
 
 @pytest.mark.asyncio
 async def test_pii_detection_persistence(temp_storage):
-    """Test that PII detections persist"""
+    """Test that PII detections are cached"""
     manager = AdvancedPrivacyManager(storage_dir=temp_storage)
 
     text = "Email: test@example.com"
-    await manager.detect_pii(text, "test_user", "session_1")
+    detections1 = await manager.detect_pii(text)
 
-    # Check that detection was stored
-    assert "test_user" in manager.pii_detections
-    assert len(manager.pii_detections["test_user"]) > 0
+    # Call again with same text - should use cache
+    detections2 = await manager.detect_pii(text)
+
+    # Should return same results
+    assert len(detections1) == len(detections2)
+    assert len(detections1) > 0

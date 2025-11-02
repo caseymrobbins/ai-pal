@@ -109,40 +109,35 @@ def sample_bottlenecks(test_user_id):
             user_id=test_user_id,
             task_description="Learn advanced Python decorators",
             bottleneck_reason=BottleneckReason.DIFFICULT,
-            detected_at=datetime.now(),
-            attempts=3,
+            avoidance_count=3,
         ),
         BottleneckTask(
             bottleneck_id="bn_2",
             user_id=test_user_id,
             task_description="Write documentation for API",
             bottleneck_reason=BottleneckReason.BORING,
-            detected_at=datetime.now(),
-            attempts=1,
+            avoidance_count=1,
         ),
         BottleneckTask(
             bottleneck_id="bn_3",
             user_id=test_user_id,
             task_description="Refactor legacy codebase",
             bottleneck_reason=BottleneckReason.ANXIETY_INDUCING,
-            detected_at=datetime.now(),
-            attempts=5,
+            avoidance_count=5,
         ),
         BottleneckTask(
             bottleneck_id="bn_4",
             user_id=test_user_id,
             task_description="Set up CI/CD pipeline",
             bottleneck_reason=BottleneckReason.SKILL_GAP,
-            detected_at=datetime.now(),
-            attempts=2,
+            avoidance_count=2,
         ),
         BottleneckTask(
             bottleneck_id="bn_5",
             user_id=test_user_id,
             task_description="Organize project files",
             bottleneck_reason=BottleneckReason.AVOIDED,
-            detected_at=datetime.now(),
-            attempts=4,
+            avoidance_count=4,
         ),
     ]
 
@@ -231,8 +226,7 @@ class TestCuriosityMap:
                 user_id=test_user_id,
                 task_description=f"Task {i}",
                 bottleneck_reason=BottleneckReason.DIFFICULT,
-                detected_at=datetime.now(),
-                attempts=1,
+                avoidance_count=1,
             )
             curiosity_compass.growth_scaffold.add_bottleneck(bn)
 
@@ -333,8 +327,7 @@ class TestCuriosityFraming:
             user_id=test_user_id,
             task_description="Clean up old code",
             bottleneck_reason=BottleneckReason.AVOIDED,
-            detected_at=datetime.now(),
-            attempts=1,
+            avoidance_count=1,
         )
         curiosity_compass.growth_scaffold.add_bottleneck(bn)
 
@@ -352,8 +345,7 @@ class TestCuriosityFraming:
             user_id=test_user_id,
             task_description="Implement complex algorithm",
             bottleneck_reason=BottleneckReason.DIFFICULT,
-            detected_at=datetime.now(),
-            attempts=1,
+            avoidance_count=1,
         )
         curiosity_compass.growth_scaffold.add_bottleneck(bn)
 
@@ -371,8 +363,7 @@ class TestCuriosityFraming:
             user_id=test_user_id,
             task_description="Update documentation",
             bottleneck_reason=BottleneckReason.BORING,
-            detected_at=datetime.now(),
-            attempts=1,
+            avoidance_count=1,
         )
         curiosity_compass.growth_scaffold.add_bottleneck(bn)
 
@@ -390,8 +381,7 @@ class TestCuriosityFraming:
             user_id=test_user_id,
             task_description="Present project to team",
             bottleneck_reason=BottleneckReason.ANXIETY_INDUCING,
-            detected_at=datetime.now(),
-            attempts=1,
+            avoidance_count=1,
         )
         curiosity_compass.growth_scaffold.add_bottleneck(bn)
 
@@ -409,8 +399,7 @@ class TestCuriosityFraming:
             user_id=test_user_id,
             task_description="Learn TypeScript",
             bottleneck_reason=BottleneckReason.SKILL_GAP,
-            detected_at=datetime.now(),
-            attempts=1,
+            avoidance_count=1,
         )
         curiosity_compass.growth_scaffold.add_bottleneck(bn)
 
@@ -560,8 +549,7 @@ class TestInterestingExplanations:
             user_id="test",
             task_description="Test task",
             bottleneck_reason=BottleneckReason.AVOIDED,
-            detected_at=datetime.now(),
-            attempts=1,
+            avoidance_count=1,
         )
 
         explanation = await curiosity_compass._explain_why_interesting(bn)
@@ -577,8 +565,7 @@ class TestInterestingExplanations:
             user_id="test",
             task_description="Test task",
             bottleneck_reason=BottleneckReason.DIFFICULT,
-            detected_at=datetime.now(),
-            attempts=1,
+            avoidance_count=1,
         )
 
         explanation = await curiosity_compass._explain_why_interesting(bn)
@@ -594,8 +581,7 @@ class TestInterestingExplanations:
                 user_id="test",
                 task_description="Test task",
                 bottleneck_reason=reason,
-                detected_at=datetime.now(),
-                attempts=1,
+                avoidance_count=1,
             )
 
             explanation = await curiosity_compass._explain_why_interesting(bn)
@@ -654,8 +640,7 @@ class TestEdgeCases:
             user_id=test_user_id,
             task_description="",
             bottleneck_reason=BottleneckReason.UNCLEAR,
-            detected_at=datetime.now(),
-            attempts=1,
+            avoidance_count=1,
         )
         curiosity_compass.growth_scaffold.add_bottleneck(bn)
 
@@ -674,8 +659,7 @@ class TestEdgeCases:
             user_id=test_user_id,
             task_description=long_task,
             bottleneck_reason=BottleneckReason.DIFFICULT,
-            detected_at=datetime.now(),
-            attempts=1,
+            avoidance_count=1,
         )
         curiosity_compass.growth_scaffold.add_bottleneck(bn)
 
@@ -696,8 +680,7 @@ class TestEdgeCases:
                 user_id=test_user_id,
                 task_description="Test task",
                 bottleneck_reason=BottleneckReason.UNCLEAR,
-                detected_at=datetime.now(),
-                attempts=1,
+                avoidance_count=1,
             )
         )
 

@@ -85,16 +85,16 @@ async def test_anthropic_cost_calculation():
     provider = AnthropicProvider(api_key="test-key")
 
     # Test Claude-3-opus (most expensive)
-    cost_opus = provider._calculate_cost("claude-3-opus-20240229", 1000, 1000)
+    cost_opus = provider._calculate_anthropic_cost("claude-3-opus-20240229", 1000, 1000)
     assert cost_opus > 0
 
     # Test Claude-3-sonnet (mid-tier)
-    cost_sonnet = provider._calculate_cost("claude-3-sonnet-20240229", 1000, 1000)
+    cost_sonnet = provider._calculate_anthropic_cost("claude-3-sonnet-20240229", 1000, 1000)
     assert cost_sonnet > 0
     assert cost_sonnet < cost_opus
 
     # Test Claude-3-haiku (cheapest)
-    cost_haiku = provider._calculate_cost("claude-3-haiku-20240307", 1000, 1000)
+    cost_haiku = provider._calculate_anthropic_cost("claude-3-haiku-20240307", 1000, 1000)
     assert cost_haiku > 0
     assert cost_haiku < cost_sonnet
 
@@ -174,11 +174,11 @@ async def test_openai_cost_calculation():
     provider = OpenAIProvider(api_key="test-key")
 
     # Test GPT-4 (expensive)
-    cost_gpt4 = provider._calculate_cost("gpt-4", 1000, 1000)
+    cost_gpt4 = provider._calculate_openai_cost("gpt-4", 1000, 1000)
     assert cost_gpt4 > 0
 
     # Test GPT-3.5-turbo (cheap)
-    cost_gpt35 = provider._calculate_cost("gpt-3.5-turbo", 1000, 1000)
+    cost_gpt35 = provider._calculate_openai_cost("gpt-3.5-turbo", 1000, 1000)
     assert cost_gpt35 > 0
     assert cost_gpt35 < cost_gpt4
 

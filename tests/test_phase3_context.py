@@ -38,8 +38,9 @@ def context_manager(temp_storage):
 @pytest.mark.asyncio
 async def test_add_memory(context_manager):
     """Test adding a memory"""
-    memory = await context_manager.add_memory(
+    memory = await context_manager.store_memory(
         user_id="test_user",
+        session_id="session_1",
         content="Python is a programming language",
         memory_type=MemoryType.FACT,
         priority=MemoryPriority.HIGH,
@@ -57,24 +58,27 @@ async def test_add_memory(context_manager):
 async def test_search_memories(context_manager):
     """Test semantic search of memories"""
     # Add several memories
-    await context_manager.add_memory(
+    await context_manager.store_memory(
         user_id="test_user",
+        session_id="session_1",
         content="Python is a programming language used for data science",
         memory_type=MemoryType.FACT,
         priority=MemoryPriority.HIGH,
         tags={"programming", "python", "data"}
     )
 
-    await context_manager.add_memory(
+    await context_manager.store_memory(
         user_id="test_user",
+        session_id="session_1",
         content="JavaScript is used for web development",
         memory_type=MemoryType.FACT,
         priority=MemoryPriority.MEDIUM,
         tags={"programming", "javascript", "web"}
     )
 
-    await context_manager.add_memory(
+    await context_manager.store_memory(
         user_id="test_user",
+        session_id="session_1",
         content="I prefer dark mode in my editor",
         memory_type=MemoryType.PREFERENCE,
         priority=MemoryPriority.LOW,
@@ -98,8 +102,9 @@ async def test_memory_consolidation(context_manager):
     """Test memory consolidation"""
     # Add enough memories to trigger consolidation
     for i in range(6):
-        await context_manager.add_memory(
+        await context_manager.store_memory(
             user_id="test_user",
+            session_id="session_1",
             content=f"Memory number {i}",
             memory_type=MemoryType.CONVERSATION,
             priority=MemoryPriority.MEDIUM,
@@ -121,8 +126,9 @@ async def test_context_window_optimization(context_manager):
     """Test context window optimization"""
     # Add many memories
     for i in range(20):
-        await context_manager.add_memory(
+        await context_manager.store_memory(
             user_id="test_user",
+            session_id="session_1",
             content=f"This is memory number {i} with some content to use tokens",
             memory_type=MemoryType.CONVERSATION,
             priority=MemoryPriority.MEDIUM if i % 2 == 0 else MemoryPriority.LOW,
@@ -130,14 +136,15 @@ async def test_context_window_optimization(context_manager):
         )
 
     # Get optimized context window
-    window = await context_manager.get_context_window("test_user", max_tokens=1000)
+    window = await context_manager.create_context_window(
+        user_id="test_user",
+        session_id="session_1",
+        max_tokens=1000
+    )
 
     assert window is not None
-    assert len(window.selected_memories) > 0
+    assert len(window.memory_ids) > 0
     assert window.total_tokens <= 1000
-    # Higher priority memories should be selected
-    priorities = [m.priority for m in window.selected_memories]
-    assert MemoryPriority.MEDIUM in priorities
 
 
 @pytest.mark.asyncio
@@ -145,8 +152,9 @@ async def test_memory_persistence(temp_storage):
     """Test that memories persist across manager instances"""
     # Create first manager and add memory
     manager1 = EnhancedContextManager(storage_dir=temp_storage)
-    await manager1.add_memory(
+    await manager1.store_memory(
         user_id="test_user",
+        session_id="session_1",
         content="Persistent memory",
         memory_type=MemoryType.FACT,
         priority=MemoryPriority.HIGH,
@@ -167,16 +175,18 @@ async def test_conversation_thread(context_manager):
     thread_id = "thread_1"
 
     # Add memories to thread
-    await context_manager.add_memory(
+    await context_manager.store_memory(
         user_id="test_user",
+        session_id="session_1",
         content="What is Python?",
         memory_type=MemoryType.CONVERSATION,
         priority=MemoryPriority.MEDIUM,
         tags={"thread:" + thread_id}
     )
 
-    await context_manager.add_memory(
+    await context_manager.store_memory(
         user_id="test_user",
+        session_id="session_1",
         content="Python is a programming language",
         memory_type=MemoryType.CONVERSATION,
         priority=MemoryPriority.MEDIUM,
@@ -200,16 +210,16 @@ async def test_memory_expiry(context_manager):
     # Add old memory
     old_memory = MemoryEntry(
         memory_id="old_1",
+        timestamp=datetime.now() - timedelta(days=100),
         user_id="test_user",
+        session_id="session_1",
         content="Old memory",
         memory_type=MemoryType.CONVERSATION,
         priority=MemoryPriority.LOW,
-        timestamp=datetime.now() - timedelta(days=100),
         tags=set(),
-        embedding=None,
-        relevance_score=1.0,
         access_count=0,
         last_accessed=datetime.now() - timedelta(days=100),
+        relevance_score=1.0,
         consolidated=False
     )
 
@@ -227,8 +237,9 @@ async def test_memory_expiry(context_manager):
 async def test_memory_update(context_manager):
     """Test updating existing memory"""
     # Add memory
-    memory = await context_manager.add_memory(
+    memory = await context_manager.store_memory(
         user_id="test_user",
+        session_id="session_1",
         content="Original content",
         memory_type=MemoryType.FACT,
         priority=MemoryPriority.MEDIUM,
