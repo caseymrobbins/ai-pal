@@ -138,6 +138,10 @@ class SystemConfig:
     max_context_tokens: int = 4096
 
 
+# Backward compatibility alias
+ACConfig = SystemConfig
+
+
 class IntegratedACSystem:
     """
     Complete Agency-Centric AI System

@@ -26,6 +26,25 @@ class GateType(Enum):
     ALIGNMENT = "alignment"  # Gate 4: Value alignment
 
 
+class GateStatus(Enum):
+    """Status of a gate validation."""
+
+    PASS = "pass"  # Gate validation passed
+    WARN = "warn"  # Gate validation passed with warnings
+    FAIL = "fail"  # Gate validation failed
+
+
+@dataclass
+class GateViolation:
+    """A violation detected during gate validation."""
+
+    gate_type: GateType
+    severity: str  # "warning" or "critical"
+    description: str
+    details: Dict[str, Any]
+    timestamp: datetime
+
+
 @dataclass
 class GateResult:
     """Result of a gate validation."""

@@ -29,6 +29,10 @@ class AgencyTrend(Enum):
     CRITICAL = "critical"  # Severe agency loss
 
 
+# Backward compatibility alias
+ARITrend = AgencyTrend
+
+
 @dataclass
 class AgencySnapshot:
     """Single point-in-time agency measurement"""
