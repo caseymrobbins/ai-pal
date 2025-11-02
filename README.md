@@ -220,12 +220,97 @@ ai-pal teach topics          # View available teaching topics
 
 ## 📦 Installation
 
-### Prerequisites
+### Windows Desktop App (Easy Install)
+
+This method uses a PowerShell script to install all dependencies (Git, Docker Desktop, Python) and create a simple desktop application to launch AI-Pal.
+
+**Installation:**
+
+1. **Download the Installer Script:**
+   - [Install_AI_Pal_App.ps1](scripts/Install_AI_Pal_App.ps1)
+   - Important: Right-click the link and select "Save as..." to download the file. Remember where you save it (e.g., your Downloads folder).
+
+2. **Open PowerShell as Administrator:**
+   - Click the Start menu
+   - Type "PowerShell"
+   - Right-click on "Windows PowerShell" and select "Run as administrator"
+
+3. **Allow the Script to Run (for this session):**
+   ```powershell
+   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+   ```
+
+4. **Navigate to the Script and Run It:**
+   ```powershell
+   cd $HOME\Downloads
+   .\Install_AI_Pal_App.ps1
+   ```
+
+5. **Follow the On-Screen Prompts:**
+   - Press Enter to continue when the script starts
+   - Approve all User Account Control (UAC) prompts for installing Git, Docker, and Python
+   - Enter your `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` when prompted (or press Enter to skip)
+   - The script will create a new "AI-Pal" shortcut on your desktop
+
+6. **Reboot Your Computer:**
+   - **CRITICAL**: Once the script shows "Part 1 Complete! REBOOT REQUIRED", you must reboot your computer. This is required for Docker installation to finalize.
+
+**How to Start AI-Pal:**
+
+- After rebooting, double-click the "AI-Pal" icon on your desktop
+- Click the "Start AI-Pal" button
+- The app will automatically start Docker and launch AI-Pal
+- Once running, the interface will open at http://localhost:8000
+- To stop, click "Stop AI-Pal" or close the window
+
+---
+
+### macOS Desktop App (Easy Install)
+
+This method uses a Terminal script to install all dependencies (Homebrew, Git, Docker Desktop, Python) and create a simple macOS application to launch AI-Pal.
+
+**Installation:**
+
+1. **Download the Installer Script:**
+   - [Install_AI_Pal_App.sh](scripts/Install_AI_Pal_App.sh)
+   - Important: Right-click the link and select "Save as..." to download. Save it to your Downloads folder.
+
+2. **Open the Terminal:**
+   - Go to Applications > Utilities > Terminal.app
+   - Or press Cmd + Space, type "Terminal", and press Enter
+
+3. **Navigate to the Script and Run It:**
+   ```bash
+   cd ~/Downloads
+   chmod +x Install_AI_Pal_App.sh
+   ./Install_AI_Pal_App.sh
+   ```
+
+4. **Follow the On-Screen Prompts:**
+   - Enter your password if prompted (for Homebrew installation)
+   - Approve any Docker installation prompts
+   - Enter your `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` when prompted (or press Enter to skip)
+   - The script will create a new "AI-Pal.app" on your Desktop
+
+**How to Start AI-Pal:**
+
+- Find the "AI-Pal" app on your desktop (gray AppleScript icon)
+- Double-click to open it
+- Click the "Start AI-Pal" button
+- The app will automatically start Docker and launch AI-Pal
+- Once running, the interface will open at http://localhost:8000
+- To stop, click "Stop AI-Pal" or close the window
+
+---
+
+### Manual Installation (All Platforms)
+
+#### Prerequisites
 - Python 3.9+ (tested on 3.11, 3.12, 3.13)
 - 8GB+ RAM (16GB+ recommended)
 - (Optional) CUDA-compatible GPU or Apple Silicon
 
-### Quick Start
+#### Quick Start
 
 ```bash
 # Clone the repository
