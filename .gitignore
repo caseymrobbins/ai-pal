@@ -49,8 +49,8 @@ logs/
 *.sqlite3
 data/
 
-# Models (these can be large)
-models/
+# Models (these can be large - but exclude source code!)
+/models/
 *.bin
 *.safetensors
 *.gguf
