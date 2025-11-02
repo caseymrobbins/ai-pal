@@ -1231,3 +1231,7 @@ class SelfImprovementLoop:
             f"accuracy={training_run.validation_accuracy:.2%}, "
             f"cost=${training_run.training_cost:.2f}"
         )
+
+
+# Alias for backward compatibility
+ImprovementType = ImprovementAction

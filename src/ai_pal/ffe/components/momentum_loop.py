@@ -762,3 +762,7 @@ class MomentumLoopOrchestrator(IMomentumLoopOrchestrator):
         if loop_state.user_id in self.active_loops:
             del self.active_loops[loop_state.user_id]
         return loop_state
+
+
+# Alias for backward compatibility
+MomentumLoop = MomentumLoopOrchestrator

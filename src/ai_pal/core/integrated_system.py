@@ -885,3 +885,7 @@ def create_default_system(data_dir: Path, credentials_path: Path) -> IntegratedA
     )
 
     return IntegratedACSystem(config)
+
+
+# Alias for backward compatibility
+ACConfig = SystemConfig

@@ -483,3 +483,7 @@ class ARIMonitor:
             "average_skill_development": sum(s.skill_development for s in snapshots) / len(snapshots),
             "average_ai_reliance": sum(s.ai_reliance for s in snapshots) / len(snapshots)
         }
+
+
+# Alias for backward compatibility
+ARITrend = AgencyTrend
