@@ -132,7 +132,7 @@ Learn your preferences while respecting privacy:
 - 8GB+ RAM (16GB+ recommended for larger local models)
 
 ### Easy Windows Install
-Read [https://github.com/caseymrobbins/ai-pal/edit/main/README.md)](https://github.com/caseymrobbins/ai-pal/blob/main/easy_windows_install.md)
+Read [https://github.com/caseymrobbins/ai-pal/edit/main/README.md](https://github.com/caseymrobbins/ai-pal/blob/main/easy_windows_install.md)
 
 ### Quick Start
 
