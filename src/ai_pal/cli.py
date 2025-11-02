@@ -332,7 +332,6 @@ def personality_discover():
             # Record answer
             await system.ffe_engine.personality_discovery.record_answer(
                 session.session_id,
-                user_id,
                 question.question_id,
                 answer
             )
