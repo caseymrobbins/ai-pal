@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Optional
 from loguru import logger
 
-from ..interfaces import IGoalIngestor
+from ..component_interfaces import IGoalIngestor
 from ..models import GoalPacket, GoalStatus, TaskComplexityLevel
 
 

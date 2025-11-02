@@ -57,7 +57,7 @@ from .models import (
     FFEMetrics,
     TimeBlockSize,
 )
-from .interfaces import (
+from .component_interfaces import (
     IPersonalityModuleConnector,
     IARIConnector,
     IDashboardConnector,

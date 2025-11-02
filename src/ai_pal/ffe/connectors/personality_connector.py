@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from ..models import SignatureStrength, StrengthType, AtomicBlock, GoalPacket
-from .personality_discovery import PersonalityDiscoveryModule, UsagePattern
+from ..modules.personality_discovery import PersonalityDiscoveryModule, UsagePattern
 
 
 @dataclass

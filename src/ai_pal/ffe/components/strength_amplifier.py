@@ -14,7 +14,7 @@ AI-Powered Features:
 from typing import List, Optional
 from loguru import logger
 
-from ..interfaces import IStrengthAmplifier
+from ..component_interfaces import IStrengthAmplifier
 from ..models import PersonalityProfile, SignatureStrength, StrengthType, AtomicBlock
 
 
