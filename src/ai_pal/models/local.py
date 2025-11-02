@@ -188,3 +188,7 @@ class LocalLLMProvider(BaseLLMProvider):
         except Exception as e:
             logger.error(f"Local LLM streaming failed: {e}")
             raise
+
+
+# Alias for backward compatibility
+LocalProvider = LocalLLMProvider
