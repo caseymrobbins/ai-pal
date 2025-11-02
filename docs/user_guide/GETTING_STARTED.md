@@ -1,16 +1,18 @@
 # AI-PAL Getting Started Guide
 
-Welcome to AI-PAL (AI-Powered Agency & Learning), an AI cognitive partner designed to enhance your capabilities while ensuring you retain and grow your agency.
+Welcome to AI-PAL (AI-Powered Agency & Learning), a production-ready cognitive partner designed to enhance your capabilities while ensuring you retain and grow your agency.
 
 ## What is AI-PAL?
 
 AI-PAL is a unique AI system built on the principle of **Agency Retention** - it helps you accomplish tasks while ensuring you become more capable, not less. Unlike traditional AI assistants that can lead to skill atrophy, AI-PAL:
 
-- 📈 **Tracks your skill development** through the Agency Retention Index (ARI)
+- 📈 **Tracks your skill development** through the Autonomy Retention Index (ARI)
 - 🎯 **Scaffolds your growth** with the Fractal Flow Engine (FFE)
 - 🛡️ **Monitors AI quality** through Epistemic Debt Management (EDM)
 - 🚦 **Enforces ethical boundaries** via the 4-Gate System
 - 🗳️ **Empowers users** through the AHO Tribunal appeal process
+- 🤝 **Privacy-first social features** for sharing wins and mutual support
+- 🧠 **Personality-aware task framing** using your signature strengths
 
 ## Quick Start
 
@@ -18,221 +20,402 @@ AI-PAL is a unique AI system built on the principle of **Agency Retention** - it
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/ai-pal.git
+git clone https://github.com/caseymrobbins/ai-pal.git
 cd ai-pal
+
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install dependencies
 pip install -e .
 
-# Set up your API keys (optional - for cloud models)
+# Initialize data directory
+mkdir -p ~/.ai-pal/data
+
+# Set up your API keys (optional - local mode works without)
 export ANTHROPIC_API_KEY="your-key-here"
 export OPENAI_API_KEY="your-key-here"
 ```
 
-### Your First Request
+### Your First Command
 
-```python
-from ai_pal.core.integrated_system import IntegratedACSystem, ACConfig
+The easiest way to use AI-PAL is through the CLI:
 
-# Initialize the system
-config = ACConfig()
-system = IntegratedACSystem(config=config)
+```bash
+# Check system status
+ai-pal status
 
-# Process a request
-result = await system.process_request(
-    user_id="your-user-id",
-    query="Help me learn how to implement binary search",
-    session_id="session-1"
-)
-
-print(f"Response: {result.model_response}")
-print(f"Agency Score: {result.metadata['ari_snapshot'].autonomy_retention}")
+# Output:
+# ✓ AI-PAL System Status
+#
+#   Core System:
+#     Gates: ✓ Operational
+#     ARI Monitor: ✓ Operational (0 snapshots)
+#     EDM Monitor: ✓ Operational (0 debts)
+#     FFE Engine: ✓ Operational
+#
+#   Priority 3 Features:
+#     Social Features: ✓ Enabled
+#     Personality Discovery: ✓ Enabled
+#     Teaching Mode: ✓ Enabled
 ```
 
-### Understanding the Response
+### Discover Your Personality
 
-AI-PAL doesn't just give you answers - it provides a comprehensive response with metadata:
+AI-PAL can discover your unique signature strengths to better frame tasks:
 
-```python
+```bash
+ai-pal personality discover
+
+# Interactive assessment with 10 questions
+# Discovers your strengths across 8 dimensions:
+# - Analytical, Creative, Social, Practical
+# - Strategic, Empathetic, Resilient, Curious
+```
+
+### Start Your First Goal
+
+```bash
+ai-pal start "Learn Python web development"
+
+# FFE will:
+# 1. Ingest and estimate the goal's value
+# 2. Use 80/20 scoping to find high-impact tasks
+# 3. Create 5 atomic blocks (15-90 minutes each)
+# 4. Reframe tasks using your signature strengths
+# 5. Track momentum and provide rewards
+```
+
+### Complete a Task
+
+```bash
+ai-pal complete "Finished Flask tutorial chapter 1"
+
+# Celebrates your win and updates progress tapestry
+# Updates agency metrics based on your growth
+```
+
+## Understanding the Response
+
+When you use AI-PAL, you don't just get answers - you get comprehensive feedback about your agency development:
+
+### CLI Output Example
+
+```bash
+ai-pal ari
+
+# Output:
+# ✓ Agency Metrics for default_user
+#
+#   Current ARI Score: 0.85 (Excellent)
+#
+#   Dimensions:
+#     Decision Quality:      0.90 ███████████████████░
+#     Skill Development:     0.85 █████████████████░░░
+#     AI Reliance:           0.80 ████████████████░░░░
+#     Bottleneck Resolution: 0.82 ████████████████░░░░
+#     Confidence:            0.88 █████████████████░░░
+#     Engagement:            0.87 █████████████████░░░
+#     Autonomy Perception:   0.83 ████████████████░░░░
+#
+#   Status: ✓ Healthy autonomy levels
+```
+
+### API Response Example
+
+When using the Python API or REST API:
+
+```json
 {
-    "model_response": "Let me guide you through binary search...",
-    "metadata": {
-        "ari_snapshot": {
-            "delta_agency": 0.15,      # Positive! You're learning
-            "skill_development": 0.2,  # Skill increased
-            "ai_reliance": 0.3,        # Moderate AI use
-            "autonomy_retention": 0.85 # You retain high agency
-        },
-        "epistemic_debts": [],         # No questionable claims
-        "gate_results": {
-            "gate_1_passed": True,     # Net agency positive
-            "gate_2_passed": True,     # No dark patterns
-            "gate_3_passed": True,     # You can override
-            "gate_4_passed": True      # Fast response
-        }
+  "model_response": "Let me guide you through implementing Flask authentication...",
+  "metadata": {
+    "ari_snapshot": {
+      "decision_quality": 0.90,
+      "skill_development": 0.85,
+      "ai_reliance": 0.80,
+      "bottleneck_resolution": 0.82,
+      "user_confidence": 0.88,
+      "engagement": 0.87,
+      "autonomy_perception": 0.83,
+      "autonomy_retention": 0.85
+    },
+    "epistemic_debts": [],
+    "gate_results": {
+      "gate_1_passed": true,
+      "gate_2_passed": true,
+      "gate_3_passed": true,
+      "gate_4_passed": true
     }
+  }
 }
 ```
 
 ## Core Concepts
 
-### 1. Agency Retention Index (ARI)
+### 1. Autonomy Retention Index (ARI)
 
-ARI tracks whether AI assistance is helping or hindering your capability development:
+ARI tracks whether AI assistance is helping or hindering your capability development across **7 dimensions**:
 
-- **Delta Agency**: Change in your overall capability (-1.0 to +1.0)
-- **Skill Development**: How much you learned from this interaction
-- **AI Reliance**: How dependent you are on AI assistance
-- **Autonomy Retention**: Your ability to act independently
+1. **Decision Quality** (0-1): How well you make decisions
+2. **Skill Development** (0-1): Are you learning or depending?
+3. **AI Reliance** (0-1): Healthy use vs. unhealthy dependency
+4. **Bottleneck Resolution** (0-1): Can you solve problems independently?
+5. **User Confidence** (0-1): Do you feel capable?
+6. **Engagement** (0-1): Are you actively participating?
+7. **Autonomy Perception** (0-1): Do you feel in control?
 
-**Goal**: Keep Delta Agency positive and Skill Development high.
+**ARI Score** = Average of 7 dimensions
+
+- **0.9-1.0**: Excellent - High autonomy
+- **0.7-0.9**: Good - Healthy use
+- **0.5-0.7**: Warning - Approaching dependency
+- **< 0.5**: Critical - Agency floor breached (system pauses)
+
+**Goal**: Keep ARI above 0.7 and trending upward.
 
 ### 2. Fractal Flow Engine (FFE)
 
 FFE helps you build momentum and achieve goals through:
 
-- **80/20 Scoping**: Identifies the 20% of work that yields 80% of value
-- **5-Block Stop Rule**: Breaks work into manageable 15-90 minute blocks
-- **Growth Scaffold**: Detects and helps you overcome bottlenecks
-- **Strength Amplifier**: Frames tasks to leverage your signature strengths
-- **Reward Emitter**: Celebrates wins to build intrinsic motivation
+- **Goal Ingestion**: Natural language → structured goals with value estimation
+- **80/20 Scoping**: AI-powered identification of high-impact tasks (20% that yields 80% value)
+- **5-Block Stop Rule**: Breaks work into manageable 15-90 minute atomic blocks
+- **Signature Strength Amplifier**: Reframes tasks to match your unique strengths
+- **Momentum Loop**: State machine (planning → working → review → celebrate)
+- **Growth Scaffold**: Detects bottlenecks and provides targeted scaffolding
+- **Reward Emitter**: Celebrates wins with personalized pride language
+- **Progress Tapestry**: Visual win tracking with narrative connections
+- **Epic Meaning Module**: Connects daily wins to long-term aspirations
 
 ### 3. Epistemic Debt Management (EDM)
 
-EDM monitors the quality of AI-generated content:
+EDM monitors the quality of AI-generated content in real-time:
 
 - **Unfalsifiable Claims**: Statements that can't be proven wrong
 - **Unverified Assertions**: Claims without evidence
 - **Vague Claims**: Imprecise or ambiguous statements
+- **Severity Scoring**: Low, medium, high, critical
+- **Debt Resolution**: Track when debts are resolved
 
 **Goal**: Keep epistemic debt low for reliable, actionable information.
 
 ### 4. The 4-Gate System
 
-Every AI interaction passes through four ethical gates:
+Every significant AI interaction passes through four ethical gates:
 
-1. **Gate 1 - Net Agency**: Does this enhance your capability?
-2. **Gate 2 - Extraction Static Analysis**: Are there dark patterns?
-3. **Gate 3 - Humanity Override**: Can you stop or modify this?
-4. **Gate 4 - Performance Parity**: Is the AI fast enough?
+1. **Gate 1 - Net Agency Test**: Does this enhance your capability? (ΔAgency ≥ 0)
+2. **Gate 2 - Extraction Analysis**: Are there dark patterns, lock-ins, or coercion?
+3. **Gate 3 - Humanity Override**: Can you stop or modify this? (Real appeals process)
+4. **Gate 4 - Performance Parity**: Is the system fast and non-discriminatory?
 
-If any gate fails, the interaction is blocked or flagged for review.
+If any gate fails, the interaction is blocked or flagged for review through the **AHO Tribunal**.
+
+### 5. Priority 3 Features
+
+**Social Relatedness** (Privacy-First):
+- Create and join user-defined groups
+- Share wins (user-initiated only, never automatic)
+- Encourage others' achievements
+- No vanity metrics, no FOMO mechanics
+- Granular privacy controls
+
+**Advanced Personality Profiling**:
+- Interactive strength discovery (8 types)
+- Dynamic updates from behavioral observation
+- Evidence-based confidence scoring
+- Automatic strength refinement over time
+
+**Learn-by-Teaching Mode**:
+- Explain concepts to a "student AI"
+- AI generates clarifying questions
+- Teaching quality scoring
+- Explanation evaluation and feedback
+
+**Curiosity Compass**:
+- Transform bottlenecks into exploration opportunities
+- 15-minute exploration blocks
+- Discovery tracking and celebration
 
 ## Common Use Cases
 
-### Learning New Skills
+### 1. Learning New Skills
 
-```python
-# AI-PAL provides scaffolding, not just answers
-result = await system.process_request(
-    user_id="learner-123",
-    query="I want to learn React hooks",
-    session_id="learning-react"
-)
+```bash
+# Define a learning goal
+ai-pal start "Master React hooks and state management"
 
-# FFE creates a learning path
-goals = await system.ffe_engine.ingest_goal(
-    user_id="learner-123",
-    description="Master React hooks",
-    complexity_level=TaskComplexityLevel.MULTI_STEP
-)
+# FFE creates a 5-block learning path:
+# Block 1 (30 min): Understand useState basics
+# Block 2 (45 min): Build simple counter component
+# Block 3 (60 min): Learn useEffect for side effects
+# Block 4 (45 min): Implement custom hooks
+# Block 5 (30 min): Refactor existing code to use hooks
 
-# Get 5-block learning plan
-plan = await system.ffe_engine.create_5_block_plan(
-    goal_id=goals.goal_id,
-    user_id="learner-123"
-)
+# Work on each block and celebrate completion
+ai-pal complete "Built working counter with useState!"
 ```
 
-### Debugging Code
+### 2. Building Projects
 
-```python
-# AI-PAL guides your debugging process
-result = await system.process_request(
-    user_id="dev-456",
-    query="My API returns 500 errors. Help me debug.",
-    session_id="debug-session"
-)
+```bash
+# Start a project goal
+ai-pal start "Build a todo app with authentication"
 
-# Check if you learned debugging skills
-if result.metadata['ari_snapshot'].skill_development > 0.1:
-    print("Great! You're developing debugging skills.")
-else:
-    print("Warning: You might be relying too much on AI.")
-```
-
-### Building Projects
-
-```python
-# FFE helps you scope and execute projects
-goal = await system.ffe_engine.ingest_goal(
-    user_id="builder-789",
-    description="Build a todo app with authentication",
-    complexity_level=TaskComplexityLevel.MULTI_PHASE
-)
-
-# Get 80/20 scoping
-scoping_result = await system.ffe_engine.scoping_agent.scope_goal(
-    goal=goal,
-    personality=user_personality
-)
+# FFE uses 80/20 scoping to identify high-value tasks:
+# - Focus on core CRUD operations first (80% of value)
+# - Add authentication second
+# - Polish UI last
 
 # Work in focused blocks
-for block in scoping_result.blocks:
-    # Focus for 15-90 minutes
-    result = await work_on_block(block)
+# Momentum Loop keeps you in flow state
+```
 
-    # Celebrate completion
-    reward = await system.ffe_engine.reward_emitter.emit_reward(
-        win=f"Completed {block.description}",
-        personality=user_personality
-    )
+### 3. Social Learning
+
+```bash
+# Create a support group
+ai-pal social create-group "Web Dev Learners" \
+  --description "Support group for learning web development"
+
+# Share a win with your group
+# (This is done through the API or when prompted by the CLI)
+
+# View your groups
+ai-pal social groups
+```
+
+### 4. Learn by Teaching
+
+```bash
+# Start a teaching session
+ai-pal teach start "Explain how HTTP requests work"
+
+# Student AI asks questions:
+# "What's the difference between GET and POST?"
+# "How does the client know the request succeeded?"
+# "What happens if the server is down?"
+
+# Your explanations are evaluated for:
+# - Accuracy
+# - Clarity
+# - Completeness
+# - Teaching effectiveness
+```
+
+## Using the Python API
+
+For programmatic access:
+
+```python
+from ai_pal.core.integrated_system import IntegratedACSystem
+from ai_pal.core.config import SystemConfig
+
+# Initialize the system
+config = SystemConfig(
+    enable_social_features=True,
+    enable_personality_discovery=True,
+    enable_teaching_mode=True
+)
+system = IntegratedACSystem(config)
+
+# Process a request
+result = await system.process_request(
+    user_id="user-123",
+    message="Help me understand binary search",
+    context={}
+)
+
+print(f"Response: {result['response']}")
+print(f"ARI Score: {result['ari_snapshot']['autonomy_retention']}")
+
+# Start an FFE goal
+goal = await system.ffe_engine.goal_ingestor.ingest_goal(
+    user_id="user-123",
+    description="Learn data structures",
+    importance=8
+)
+
+# Get 5-block plan
+plan = await system.ffe_engine.create_5_block_plan(
+    user_id="user-123",
+    goal_id=goal.goal_id
+)
+
+for block in plan.blocks:
+    print(f"Block {block.block_index}: {block.description}")
+```
+
+## Using the REST API
+
+AI-PAL provides a comprehensive REST API with 23 endpoints:
+
+```bash
+# Start API server
+uvicorn ai_pal.api.main:app --reload
+
+# Health check
+curl http://localhost:8000/health
+
+# Create a goal
+curl -X POST http://localhost:8000/api/ffe/goals \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "user123",
+    "description": "Learn machine learning",
+    "importance": 8
+  }'
+
+# Start personality discovery
+curl -X POST http://localhost:8000/api/personality/discover/start \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": "user123"}'
+
+# View API documentation
+open http://localhost:8000/docs
 ```
 
 ## Monitoring Your Progress
 
-### View Your Agency Dashboard
+### View Your Agency Metrics
 
-```python
-from ai_pal.ui.agency_dashboard import AgencyDashboard
+```bash
+# Current ARI score across all dimensions
+ai-pal ari
 
-dashboard = AgencyDashboard(user_id="your-user-id")
-
-# Get current metrics
-metrics = await dashboard.get_current_metrics()
-print(f"Current Agency Score: {metrics['current_agency']}")
-print(f"7-day Trend: {metrics['7_day_trend']}")
-
-# Get recent snapshots
-snapshots = await dashboard.get_recent_snapshots(days=7)
-
-# Check for alerts
-alerts = await dashboard.get_active_alerts()
-for alert in alerts:
-    print(f"⚠️ {alert.alert_type}: {alert.message}")
+# System status with recent activity
+ai-pal status
 ```
 
-### Check Epistemic Debt
+### Check Your Strengths
 
-```python
-# Review epistemic debt from recent interactions
-debts = await system.edm_monitor.get_recent_debts(
-    user_id="your-user-id",
-    days=7
-)
+```bash
+# View discovered signature strengths
+ai-pal personality show
 
-# High-severity debts require attention
-critical_debts = [d for d in debts if d.severity == "high"]
-if critical_debts:
-    print(f"⚠️ {len(critical_debts)} high-severity debts detected")
+# Output shows your top strengths:
+# - Analytical: 0.85
+# - Creative: 0.75
+# - Strategic: 0.80
+# (etc.)
+```
+
+### Review Your Social Activity
+
+```bash
+# View your groups
+ai-pal social groups
+
+# See shared wins and encouragements
+# (Through API or web interface)
 ```
 
 ## Appealing AI Decisions
 
-If you disagree with an AI decision, you can submit an appeal:
+If you disagree with an AI decision, you can submit an appeal through the **AHO Tribunal**:
 
 ```python
-from ai_pal.gates.enhanced_tribunal import EnhancedTribunal, AppealPriority
+from ai_pal.gates.enhanced_tribunal import EnhancedTribunal, Appeal, AppealPriority
 
 tribunal = EnhancedTribunal()
 
@@ -242,17 +425,17 @@ appeal = await tribunal.submit_appeal(
         appeal_id="appeal-001",
         user_id="your-user-id",
         action_id="blocked-action-123",
-        timestamp=datetime.now(),
-        status=AppealStatus.PENDING,
-        priority=AppealPriority.HIGH,
-        ai_decision="Gate 1 blocked your request",
-        user_complaint="I believe this would help me learn",
-        decision_context={"gate": "gate_1", "reason": "deskilling_risk"}
+        ai_decision="Gate 1 blocked: potential deskilling risk",
+        user_complaint="I believe this would help me learn the concept faster",
+        priority=AppealPriority.HIGH
     )
 )
 
-# Appeals are reviewed by multiple stakeholders
-# You'll receive a decision within:
+# Appeals are reviewed by 7 stakeholder roles:
+# - User advocate, Developer, Ethics board, Domain expert,
+#   Community rep, Ops/Support, Product owner
+#
+# Decision timeline:
 # - Critical: 6 hours
 # - High: 1 day
 # - Medium: 3 days
@@ -261,116 +444,118 @@ appeal = await tribunal.submit_appeal(
 
 ## Best Practices
 
-### 1. Set Learning Goals
+### 1. Set Learning Goals, Not Output Goals
 
-Define what you want to achieve, not just what you want AI to do for you:
+```bash
+# ❌ Bad: "Build me a REST API"
+# ✅ Good: "Help me learn to build a REST API"
 
-```python
-# ❌ Bad: "Write a function that..."
-# ✅ Good: "Help me learn to write a function that..."
-
-goal = await ffe.ingest_goal(
-    user_id="user",
-    description="Learn to implement authentication (not just get working code)",
-    complexity_level=TaskComplexityLevel.MULTI_STEP
-)
+ai-pal start "Learn to build RESTful APIs with Flask"
 ```
 
-### 2. Review Your ARI Regularly
+### 2. Review Your ARI Weekly
 
-Check your agency trends weekly:
+```bash
+# Check your agency trends
+ai-pal ari
 
-```python
-# Get 30-day trend
-trend = await ari_monitor.calculate_trend(
-    user_id="user",
-    days=30
-)
-
-if trend['direction'] == 'declining':
-    print("⚠️ Your agency is declining. Try more hands-on work.")
+# If trending downward:
+# - Work more independently
+# - Use AI for guidance, not answers
+# - Focus on understanding, not just completion
 ```
 
 ### 3. Verify High-Stakes Information
 
-For critical decisions, check epistemic debt:
+```bash
+# For critical decisions, always verify AI responses
+# Check epistemic debts through the API:
+debts = system.edm_monitor.get_recent_debts(user_id="user", days=1)
 
-```python
-result = await system.process_request(
-    user_id="user",
-    query="What's the best treatment for this medical condition?",
-    session_id="medical-query"
-)
-
-# Check epistemic debts
-debts = result.metadata.get('epistemic_debts', [])
-high_risk = [d for d in debts if d.get('high_risk_count', 0) > 0]
-
+high_risk = [d for d in debts if d.severity in ["high", "critical"]]
 if high_risk:
-    print("⚠️ This response contains unverified medical claims.")
-    print("Consult a healthcare professional.")
+    print("⚠️ Verify this information with authoritative sources")
 ```
 
-### 4. Use FFE for Big Projects
+### 4. Use FFE for Complex Projects
 
-Break large goals into manageable pieces:
+```bash
+# Break large goals into manageable pieces
+ai-pal start "Build and deploy a full-stack application"
 
-```python
-# Ingest main goal
-main_goal = await ffe.ingest_goal(
-    user_id="user",
-    description="Build and deploy a production web app",
-    complexity_level=TaskComplexityLevel.MULTI_PHASE
-)
+# FFE automatically:
+# 1. Scopes the goal (80/20 analysis)
+# 2. Creates 5 atomic blocks
+# 3. Tracks momentum
+# 4. Celebrates wins
+# 5. Identifies bottlenecks
+```
 
-# FFE breaks it into atomic tasks
-# Work on one 15-90 minute block at a time
-# Celebrate small wins to build momentum
+### 5. Leverage Social Features for Support
+
+```bash
+# Create accountability groups
+ai-pal social create-group "100 Days of Code" \
+  --description "Daily coding accountability"
+
+# Share wins to build momentum
+# Encourage others to create positive culture
 ```
 
 ## Configuration
 
-### Model Selection
+### CLI Configuration
 
-AI-PAL supports multiple model providers:
+The CLI uses the system's default configuration. To customize:
 
 ```python
-config = ACConfig(
-    enable_model_orchestration=True,
-    model_preferences={
-        "default_provider": "anthropic",  # or "openai", "local"
-        "optimization_goal": "balanced",   # or "speed", "quality", "cost"
-    }
-)
+# Edit ~/.ai-pal/config.json (if it exists)
+# Or set environment variables:
+export ANTHROPIC_API_KEY="sk-ant-..."
+export ENABLE_SOCIAL_FEATURES=true
+export ENABLE_PERSONALITY_DISCOVERY=true
 ```
 
-### Privacy Settings
-
-Control data collection and retention:
+### Python API Configuration
 
 ```python
-config = ACConfig(
-    enable_ari_monitoring=True,   # Track agency
-    enable_edm_monitoring=True,   # Monitor quality
-    data_retention_days=90,       # Auto-delete old data
-    pii_detection_enabled=True,   # Detect/redact PII
-)
-```
+from ai_pal.core.config import SystemConfig
 
-### Gate Configuration
-
-Adjust gate sensitivity:
-
-```python
-config = ACConfig(
+config = SystemConfig(
+    # Phase 1: Gates
     enable_gates=True,
-    gate_settings={
-        "gate_1_threshold": 0.0,  # Require net positive agency
-        "gate_2_enabled": True,   # Enable dark pattern detection
-        "gate_3_required": True,  # Require override capability
-        "gate_4_max_latency": 5000,  # Max 5 seconds
-    }
+    enable_tribunal=True,
+
+    # Phase 2: Monitoring
+    enable_ari=True,
+    enable_edm=True,
+    enable_self_improvement=True,
+
+    # Phase 3: Advanced
+    enable_privacy=True,
+    enable_context=True,
+    enable_orchestration=True,
+    enable_dashboard=True,
+
+    # Phase 5: FFE
+    enable_ffe=True,
+
+    # Priority 3: Advanced Features
+    enable_social_features=True,
+    enable_personality_discovery=True,
+    enable_teaching_mode=True,
+
+    # Model preferences
+    default_model_provider="anthropic",  # or "openai", "local"
+    optimization_strategy="balanced",     # or "speed", "cost", "quality"
+
+    # Privacy
+    data_dir=Path.home() / ".ai-pal" / "data",
+    max_context_tokens=4096,
+    history_retention_days=90
 )
+
+system = IntegratedACSystem(config)
 ```
 
 ## Troubleshooting
@@ -379,42 +564,56 @@ config = ACConfig(
 
 Your request was flagged as potentially deskilling. Try:
 
-1. Rephrase to emphasize learning: "Help me understand..."
-2. Request scaffolding: "Guide me through..."
-3. Submit an appeal if you believe it's a false positive
+1. **Rephrase to emphasize learning**: "Help me understand how to..." instead of "Do this for me..."
+2. **Request scaffolding**: "Guide me through the steps..." instead of "Give me the answer..."
+3. **Submit an appeal** if you believe it's a false positive (appeals are free and reviewed by humans)
 
 ### "High epistemic debt detected"
 
-The AI's response contains questionable claims. Review the debts:
+The AI's response contains questionable claims. Actions:
 
-```python
-debts = result.metadata['epistemic_debts']
-for debt in debts:
-    print(f"{debt['type']}: {debt['claim']}")
-    print(f"Severity: {debt['severity']}")
-```
+1. **Review the debts**: Check which claims are flagged
+2. **Verify with authoritative sources**: Don't trust high-severity debts
+3. **Ask for evidence**: Request citations or supporting data
+4. **Report patterns**: If certain topics always have high debt, report to developers
 
 ### "Agency score declining"
 
-Your agency is decreasing. To recover:
+Your autonomy is decreasing. To recover:
 
-1. Work on tasks independently before asking AI
-2. Implement solutions yourself, using AI for guidance only
-3. Review the learning path in your FFE goals
+1. **Work independently first**: Try solving problems before asking AI
+2. **Implement solutions yourself**: Use AI for guidance, not implementation
+3. **Review learning paths**: Check FFE goals for skill development opportunities
+4. **Take breaks from AI**: Build confidence through independent work
+
+### CLI not found
+
+```bash
+# Ensure package is installed in editable mode
+pip install -e .
+
+# Check installation
+which ai-pal
+
+# If not found, add to PATH:
+export PATH="$PATH:$HOME/.local/bin"
+```
 
 ## Next Steps
 
-- **User Manual**: Detailed guide to all features
-- **Developer Docs**: Architecture and API reference
-- **Tutorials**: Step-by-step walkthroughs
-- **Community**: Join discussions and share experiences
+- **[FFE User Manual](FFE_USER_MANUAL.md)**: Detailed guide to the Fractal Flow Engine
+- **[Architecture Guide](../developer/ARCHITECTURE.md)**: System design and components
+- **[API Reference](../developer/API_REFERENCE.md)**: Complete API documentation
+- **[Deployment Guide](../deployment/DEPLOYMENT_GUIDE.md)**: Production deployment
 
 ## Support
 
-- **Documentation**: https://docs.ai-pal.dev
-- **GitHub Issues**: https://github.com/your-org/ai-pal/issues
-- **Community Forum**: https://community.ai-pal.dev
+- **Documentation**: [docs/](../)
+- **GitHub Issues**: [github.com/caseymrobbins/ai-pal/issues](https://github.com/caseymrobbins/ai-pal/issues)
+- **GitHub Discussions**: [github.com/caseymrobbins/ai-pal/discussions](https://github.com/caseymrobbins/ai-pal/discussions)
 
 ---
 
 **Remember**: AI-PAL's goal is to make you more capable, not more dependent. Use it as a partner in growth, not a replacement for thinking.
+
+*"The best AI is the one that makes itself less necessary over time."*
