@@ -225,7 +225,7 @@ This method uses a Terminal script to install all dependencies (Homebrew, Git, D
 6.  To stop the application, you can either click the **"Stop AI-Pal"** button in the app window or simply close the window, which will also shut down the containers.
 
 
-### Quick Start
+### Manual Quick Start Guide
 
 ```bash
 # Clone the repository
