@@ -250,6 +250,46 @@ export OPENAI_API_KEY="your-key-here"
 ai-pal status
 ```
 
+### Hardware-Specific Setup
+
+**For GPU users (NVIDIA):**
+```bash
+pip install -e . --extra-index-url https://download.pytorch.org/whl/cu118
+```
+
+**For Apple Silicon (M1/M2/M3):**
+```bash
+# PyTorch with Metal acceleration
+pip install -e .
+# MPS backend will be automatically detected
+```
+
+**For CPU-only:**
+```bash
+pip install -e .
+# System will optimize for CPU execution
+```
+
+**For Windows:**
+```bash
+# Create virtual environment
+python -m venv .venv
+.venv\Scripts\activate
+
+# Install dependencies
+pip install -e .
+
+# Initialize system (PowerShell)
+mkdir $env:USERPROFILE\.ai-pal\data
+
+# Set API keys (PowerShell)
+$env:ANTHROPIC_API_KEY="your-key-here"
+$env:OPENAI_API_KEY="your-key-here"
+
+# Run CLI
+ai-pal status
+```
+
 ### Docker Installation
 
 ```bash
