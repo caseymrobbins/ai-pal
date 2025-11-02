@@ -84,6 +84,15 @@ class BottleneckReason(Enum):
     UNCLEAR = "unclear"              # Poorly defined
 
 
+class BottleneckType(Enum):
+    """Type of bottleneck"""
+    CLARITY = "clarity"              # Unclear or ambiguous task
+    SKILL = "skill"                  # Missing skills
+    MOTIVATION = "motivation"        # Low motivation
+    ANXIETY = "anxiety"              # Anxiety-inducing
+    COMPLEXITY = "complexity"        # Too complex
+
+
 class GoalStatus(Enum):
     """Status of goals in the system"""
     PENDING = "pending"              # Not started
@@ -253,6 +262,24 @@ class AtomicBlock:
 
     # Metadata
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class MicroBottleneck:
+    """
+    A lightweight bottleneck detected during momentum loop execution
+
+    Used for quick bottleneck detection and reframing during active loops.
+    """
+    bottleneck_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    description: str = ""
+    bottleneck_type: BottleneckType = BottleneckType.CLARITY
+    detected_at: datetime = field(default_factory=datetime.now)
+    atomic_block_id: str = ""
+
+    # Optional fields for compatibility
+    user_id: str = ""
+    severity: float = 0.5  # 0-1 scale
 
 
 @dataclass
