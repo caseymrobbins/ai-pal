@@ -340,8 +340,7 @@ def personality_discover():
 
         # Complete session
         result = await system.ffe_engine.personality_discovery.complete_session(
-            session.session_id,
-            user_id
+            session.session_id
         )
 
         # Show results
