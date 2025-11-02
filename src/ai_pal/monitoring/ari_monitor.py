@@ -487,3 +487,23 @@ class ARIMonitor:
 
 # Alias for backward compatibility
 ARITrend = AgencyTrend
+
+
+class AlertSeverity(Enum):
+    """Severity levels for ARI alerts"""
+    INFO = "info"
+    WARNING = "warning"
+    CRITICAL = "critical"
+
+
+@dataclass
+class ARIAlert:
+    """Alert triggered by ARI monitoring"""
+    alert_id: str
+    timestamp: datetime
+    user_id: str
+    severity: AlertSeverity
+    alert_type: str  # Type of alert (e.g., "agency_loss", "skill_atrophy")
+    message: str
+    metrics: Dict[str, float] = field(default_factory=dict)
+    snapshot_id: Optional[str] = None
