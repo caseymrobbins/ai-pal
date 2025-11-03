@@ -4,6 +4,7 @@ AI-PAL Command Line Interface
 Interactive CLI for the AI-PAL cognitive partner system.
 
 Features:
+- Chat with AI (with ARI/RDI monitoring)
 - Start and manage goals
 - Momentum Loop interaction
 - ARI score tracking
@@ -24,6 +25,7 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Prompt, Confirm
 from rich import print as rprint
+from loguru import logger
 
 from .core.integrated_system import IntegratedACSystem, SystemConfig
 
@@ -557,6 +559,188 @@ def teach_topics():
             console.print(f"  • {topic}")
 
     asyncio.run(_topics())
+
+
+# ===== CHAT COMMAND =====
+
+@app.command()
+def chat(
+    local_only: bool = typer.Option(
+        False, "--local-only", "-l", help="Use only local models"
+    )
+):
+    """Start an interactive chat session with AI-PAL"""
+    system = get_system()
+    user_id = get_user_id()
+
+    console.print(Panel.fit(
+        "[bold cyan]AI-PAL Chat Session[/bold cyan]\n\n"
+        "Privacy-first cognitive partner with:\n"
+        "• Real-time ARI monitoring (skill retention)\n"
+        "• RDI detection (reality drift)\n"
+        "• PII protection\n"
+        "• Context memory\n\n"
+        "Type 'exit' or 'quit' to end the session.",
+        border_style="cyan"
+    ))
+
+    asyncio.run(_chat_session(system, user_id, local_only))
+
+
+async def _chat_session(system: IntegratedACSystem, user_id: str, local_only: bool):
+    """Run interactive chat session with full AC-AI integration"""
+
+    if not system.orchestrator:
+        console.print("[red]✗[/red] Model orchestrator not available")
+        raise typer.Exit(1)
+
+    console.print("\n[dim green]Ready! Start chatting...[/dim green]\n")
+
+    # Chat loop
+    while True:
+        try:
+            # Get user input
+            user_input = console.input("\n[bold cyan]You:[/bold cyan] ")
+
+            if user_input.lower().strip() in ["exit", "quit", "bye"]:
+                console.print("\n[dim]Goodbye! 👋[/dim]\n")
+                break
+
+            if not user_input.strip():
+                continue
+
+            # Show processing indicator
+            console.print("\n[dim]Thinking...[/dim]\n")
+
+            # === ARI ENGINE: Passive Lexical Analysis ===
+            if system.ari_engine:
+                try:
+                    await system.ari_engine.passive_analyzer.analyze_text(
+                        user_id=user_id,
+                        text=user_input,
+                        text_type="chat_message"
+                    )
+                except Exception as e:
+                    logger.warning(f"ARI lexical analysis failed: {e}")
+
+            # === RDI MONITOR: Reality Drift Detection ===
+            rdi_score = None
+            drift_signals = []
+            if system.rdi_monitor:
+                try:
+                    rdi_score, drift_signals = await system.rdi_monitor.analyze_input(
+                        user_id=user_id,
+                        user_input=user_input,
+                        domain=None
+                    )
+
+                    # Alert on high drift
+                    if rdi_score and rdi_score > 0.7:
+                        console.print(
+                            f"[yellow]⚠ Reality drift detected (RDI: {rdi_score:.2f})[/yellow]"
+                        )
+                except Exception as e:
+                    logger.warning(f"RDI analysis failed: {e}")
+
+            # === PRIVACY: PII Detection ===
+            processed_input = user_input
+            if system.privacy_manager:
+                try:
+                    detection = await system.privacy_manager.detect_pii(user_input)
+                    if detection.entities_found:
+                        processed_input = detection.scrubbed_text
+                        console.print(
+                            f"[yellow]ℹ PII detected and protected ({len(detection.entities_found)} items)[/yellow]"
+                        )
+                except Exception as e:
+                    logger.warning(f"PII detection failed: {e}")
+
+            # === CONTEXT: Store user message ===
+            if system.context_manager:
+                try:
+                    from ..context.enhanced_context import MemoryEntry, MemoryType, MemoryPriority
+                    await system.context_manager.store_memory(
+                        MemoryEntry(
+                            user_id=user_id,
+                            content=processed_input,
+                            memory_type=MemoryType.CONVERSATION,
+                            priority=MemoryPriority.MEDIUM,
+                            metadata={"source": "chat_session"}
+                        )
+                    )
+                except Exception as e:
+                    logger.warning(f"Context storage failed: {e}")
+
+            # === ORCHESTRATOR: Generate AI response ===
+            try:
+                from ..orchestration.multi_model import TaskRequirements
+
+                requirements = TaskRequirements(
+                    task_type="chat",
+                    complexity="medium",
+                    user_preferences={"local_only": local_only}
+                )
+
+                response = await system.orchestrator.route_request(
+                    user_id=user_id,
+                    query=processed_input,
+                    requirements=requirements
+                )
+
+                # Display AI response
+                from rich.markdown import Markdown
+                console.print(Panel(
+                    Markdown(response.response_text),
+                    title="[bold green]AI-PAL[/bold green]",
+                    border_style="green"
+                ))
+
+                # Show metadata in debug mode
+                console.print(
+                    f"\n[dim]Model: {response.provider.value}/{response.model_name} | "
+                    f"Tokens: {response.tokens_used}[/dim]"
+                )
+
+                # === CONTEXT: Store AI response ===
+                if system.context_manager:
+                    try:
+                        await system.context_manager.store_memory(
+                            MemoryEntry(
+                                user_id=user_id,
+                                content=response.response_text,
+                                memory_type=MemoryType.CONVERSATION,
+                                priority=MemoryPriority.MEDIUM,
+                                metadata={
+                                    "source": "chat_session",
+                                    "model": response.model_name,
+                                    "provider": response.provider.value
+                                }
+                            )
+                        )
+                    except Exception as e:
+                        logger.warning(f"Context storage failed: {e}")
+
+                # === ARI ENGINE: Analyze AI response too ===
+                if system.ari_engine:
+                    try:
+                        await system.ari_engine.passive_analyzer.analyze_text(
+                            user_id=user_id,
+                            text=response.response_text,
+                            text_type="ai_response"
+                        )
+                    except Exception as e:
+                        logger.warning(f"ARI analysis of AI response failed: {e}")
+
+            except Exception as e:
+                console.print(f"\n[red]Error:[/red] {e}\n")
+                logger.exception("Chat error")
+
+        except KeyboardInterrupt:
+            console.print("\n\n[dim]Session interrupted. Goodbye! 👋[/dim]\n")
+            break
+        except Exception as e:
+            console.print(f"\n[red]Unexpected error:[/red] {e}\n")
+            logger.exception("Chat session error")
 
 
 # ===== VERSION =====
