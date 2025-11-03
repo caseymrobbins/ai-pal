@@ -25,6 +25,8 @@ from ..gates.gate_system import GateSystem, GateType
 
 # Phase 2 imports
 from ..monitoring.ari_monitor import ARIMonitor, AgencySnapshot
+from ..monitoring.ari_engine import ARIEngine  # NEW: Multi-layered skill atrophy detection
+from ..monitoring.rdi_monitor import RDIMonitor  # NEW: Privacy-first reality drift detection
 from ..monitoring.edm_monitor import EDMMonitor
 from ..improvement.self_improvement import SelfImprovementLoop, FeedbackEvent, FeedbackType
 from ..improvement.lora_tuning import LoRAFineTuner, TrainingExample
@@ -175,6 +177,26 @@ class IntegratedACSystem:
             else None
         )
 
+        # NEW: Multi-layered skill atrophy detection (ARI Engine)
+        self.ari_engine = (
+            ARIEngine(
+                storage_dir=config.data_dir / "ari_engine",
+                orchestrator=None  # Will be set after orchestrator is initialized
+            )
+            if config.enable_ari_monitoring
+            else None
+        )
+
+        # NEW: Privacy-first reality drift detection (RDI Monitor)
+        self.rdi_monitor = (
+            RDIMonitor(
+                storage_dir=config.data_dir / "rdi_monitor",
+                enable_privacy_mode=True  # ALWAYS True in production
+            )
+            if config.enable_ari_monitoring  # Use same flag as ARI
+            else None
+        )
+
         self.edm_monitor = (
             EDMMonitor(
                 storage_dir=config.data_dir / "edm_snapshots",
@@ -226,6 +248,10 @@ class IntegratedACSystem:
             else None
         )
 
+        # Set orchestrator on ARI Engine (for AI-powered analysis)
+        if self.ari_engine and self.orchestrator:
+            self.ari_engine.orchestrator = self.orchestrator
+
         self.dashboard = (
             AgencyDashboard(
                 ari_monitor=self.ari_monitor,
@@ -233,7 +259,9 @@ class IntegratedACSystem:
                 improvement_loop=self.improvement_loop,
                 privacy_manager=self.privacy_manager,
                 orchestrator=self.orchestrator,
-                context_manager=self.context_manager
+                context_manager=self.context_manager,
+                ari_engine=self.ari_engine,  # NEW: Pass ARI Engine to dashboard
+                rdi_monitor=self.rdi_monitor  # NEW: Pass RDI Monitor to dashboard
             )
             if config.enable_dashboard
             else None
