@@ -180,8 +180,7 @@ class IntegratedACSystem:
         # NEW: Multi-layered skill atrophy detection (ARI Engine)
         self.ari_engine = (
             ARIEngine(
-                storage_dir=config.data_dir / "ari_engine",
-                orchestrator=None  # Will be set after orchestrator is initialized
+                storage_dir=config.data_dir / "ari_engine"
             )
             if config.enable_ari_monitoring
             else None
@@ -247,10 +246,6 @@ class IntegratedACSystem:
             if config.enable_model_orchestration
             else None
         )
-
-        # Set orchestrator on ARI Engine (for AI-powered analysis)
-        if self.ari_engine and self.orchestrator:
-            self.ari_engine.orchestrator = self.orchestrator
 
         self.dashboard = (
             AgencyDashboard(
