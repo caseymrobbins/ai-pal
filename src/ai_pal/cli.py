@@ -663,21 +663,15 @@ async def _chat_session(system: IntegratedACSystem, user_id: str, local_only: bo
             # === CONTEXT: Store user message ===
             if system.context_manager:
                 try:
-                    from ai_pal.context.enhanced_context import MemoryEntry, MemoryType, MemoryPriority
-                    from datetime import datetime
-                    import uuid
+                    from ai_pal.context.enhanced_context import MemoryType, MemoryPriority
 
                     await system.context_manager.store_memory(
-                        MemoryEntry(
-                            memory_id=str(uuid.uuid4()),
-                            timestamp=datetime.now(),
-                            user_id=user_id,
-                            session_id="chat_session",
-                            content=processed_input,
-                            memory_type=MemoryType.CONVERSATION,
-                            priority=MemoryPriority.MEDIUM,
-                            metadata={"source": "chat_session"}
-                        )
+                        user_id=user_id,
+                        session_id="chat_session",
+                        content=processed_input,
+                        memory_type=MemoryType.CONVERSATION,
+                        priority=MemoryPriority.MEDIUM,
+                        tags={"chat", "user_input"}
                     )
                 except Exception as e:
                     logger.warning(f"Context storage failed: {e}")
@@ -688,7 +682,7 @@ async def _chat_session(system: IntegratedACSystem, user_id: str, local_only: bo
 
                 requirements = TaskRequirements(
                     task_type="chat",
-                    complexity=TaskComplexity.MEDIUM,
+                    complexity=TaskComplexity.MODERATE,
                     requires_local=local_only
                 )
 
@@ -716,20 +710,12 @@ async def _chat_session(system: IntegratedACSystem, user_id: str, local_only: bo
                 if system.context_manager:
                     try:
                         await system.context_manager.store_memory(
-                            MemoryEntry(
-                                memory_id=str(uuid.uuid4()),
-                                timestamp=datetime.now(),
-                                user_id=user_id,
-                                session_id="chat_session",
-                                content=response.response_text,
-                                memory_type=MemoryType.CONVERSATION,
-                                priority=MemoryPriority.MEDIUM,
-                                metadata={
-                                    "source": "chat_session",
-                                    "model": response.model_name,
-                                    "provider": response.provider.value
-                                }
-                            )
+                            user_id=user_id,
+                            session_id="chat_session",
+                            content=response.response_text,
+                            memory_type=MemoryType.CONVERSATION,
+                            priority=MemoryPriority.MEDIUM,
+                            tags={"chat", "ai_response", response.model_name}
                         )
                     except Exception as e:
                         logger.warning(f"Context storage failed: {e}")
