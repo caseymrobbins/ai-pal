@@ -197,7 +197,7 @@ def start(
                 console.print(Panel.fit(
                     f"[bold cyan]Block 1 Started![/bold cyan]\n\n"
                     f"{blocks[0].strength_reframe or blocks[0].description}\n\n"
-                    f"[dim]Momentum Loop: {loop_state.current_stage}[/dim]",
+                    f"[dim]Momentum Loop: {loop_state.current_state.value}[/dim]",
                     border_style="cyan"
                 ))
 
