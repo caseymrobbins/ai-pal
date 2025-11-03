@@ -678,32 +678,34 @@ async def _chat_session(system: IntegratedACSystem, user_id: str, local_only: bo
 
             # === ORCHESTRATOR: Generate AI response ===
             try:
-                from ai_pal.orchestration.multi_model import TaskRequirements, TaskComplexity
+                from ai_pal.orchestration.multi_model import TaskComplexity
 
-                requirements = TaskRequirements(
-                    task_type="chat",
-                    complexity=TaskComplexity.MODERATE,
-                    requires_local=local_only
+                # Route request to optimal model
+                optimization = "privacy" if local_only else "balanced"
+                response_dict = await system.orchestrator.route_request(
+                    prompt=processed_input,
+                    task_complexity=TaskComplexity.MODERATE,
+                    optimization_goal=optimization,
+                    max_tokens=2000,
+                    temperature=0.7
                 )
 
-                response = await system.orchestrator.route_request(
-                    user_id=user_id,
-                    query=processed_input,
-                    requirements=requirements
-                )
+                # Extract response
+                ai_response = response_dict.get("response", "No response generated")
+                model_used = response_dict.get("model", "unknown")
+                provider_used = response_dict.get("provider", "unknown")
 
                 # Display AI response
                 from rich.markdown import Markdown
                 console.print(Panel(
-                    Markdown(response.response_text),
+                    Markdown(ai_response),
                     title="[bold green]AI-PAL[/bold green]",
                     border_style="green"
                 ))
 
-                # Show metadata in debug mode
+                # Show metadata
                 console.print(
-                    f"\n[dim]Model: {response.provider.value}/{response.model_name} | "
-                    f"Tokens: {response.tokens_used}[/dim]"
+                    f"\n[dim]Model: {provider_used}/{model_used}[/dim]"
                 )
 
                 # === CONTEXT: Store AI response ===
@@ -712,10 +714,10 @@ async def _chat_session(system: IntegratedACSystem, user_id: str, local_only: bo
                         await system.context_manager.store_memory(
                             user_id=user_id,
                             session_id="chat_session",
-                            content=response.response_text,
+                            content=ai_response,
                             memory_type=MemoryType.CONVERSATION,
                             priority=MemoryPriority.MEDIUM,
-                            tags={"chat", "ai_response", response.model_name}
+                            tags={"chat", "ai_response", model_used}
                         )
                     except Exception as e:
                         logger.warning(f"Context storage failed: {e}")
@@ -725,7 +727,7 @@ async def _chat_session(system: IntegratedACSystem, user_id: str, local_only: bo
                     try:
                         await system.ari_engine.lexical_analyzer.analyze_text(
                             user_id=user_id,
-                            text=response.response_text,
+                            text=ai_response,
                             text_type="ai_response"
                         )
                     except Exception as e:
