@@ -231,6 +231,48 @@ class MomentumHistoryDB(Base):
     )
 
 
+class PatchRequestDB(Base):
+    """AI self-improvement patch requests"""
+    __tablename__ = "patch_requests"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    request_id = Column(String(36), unique=True, nullable=False, index=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now, index=True)
+
+    # Target file and content
+    target_file = Column(String(500), nullable=False, index=True)
+    reasoning = Column(Text, nullable=False)
+    diff = Column(Text, nullable=False)
+    new_code_blob = Column(Text, nullable=False)
+
+    # Metadata
+    component = Column(String(100), nullable=False)  # Which component is being modified
+    improvement_type = Column(String(50), nullable=False)  # Type of improvement
+    confidence = Column(Float, nullable=False)  # AI's confidence (0-1)
+
+    # Status tracking
+    status = Column(String(50), default="PENDING_APPROVAL", index=True, nullable=False)
+    # Status values: PENDING_APPROVAL, APPROVED, DENIED, APPLIED, FAILED
+
+    # Human review
+    reviewed_at = Column(DateTime, nullable=True)
+    reviewed_by = Column(String(255), nullable=True)
+    review_comment = Column(Text, nullable=True)
+
+    # Application tracking
+    applied_at = Column(DateTime, nullable=True)
+    application_error = Column(Text, nullable=True)
+
+    # Context for the request
+    feedback_ids = Column(Text, nullable=True)  # JSON array of feedback event IDs
+    metrics = Column(Text, nullable=True)  # JSON metrics that motivated this change
+
+    __table_args__ = (
+        Index('idx_status_created', 'status', 'created_at'),
+        Index('idx_component_status', 'component', 'status'),
+    )
+
+
 # ============================================================================
 # Database Manager
 # ============================================================================
@@ -511,4 +553,136 @@ class UserProfileRepository:
             "current_ari_score": profile.current_ari_score,
             "created_at": profile.created_at,
             "updated_at": profile.updated_at
+        }
+
+
+class PatchRequestRepository:
+    """Repository for patch request operations"""
+
+    def __init__(self, db_manager: DatabaseManager):
+        self.db = db_manager
+
+    async def save_request(self, request_data: Dict[str, Any]) -> str:
+        """Save patch request"""
+        async with self.db.get_session() as session:
+            request = PatchRequestDB(**request_data)
+            session.add(request)
+            await session.commit()
+            return request.request_id
+
+    async def get_request(self, request_id: str) -> Optional[Dict[str, Any]]:
+        """Get patch request by ID"""
+        from sqlalchemy import select
+
+        async with self.db.get_session() as session:
+            query = select(PatchRequestDB).where(PatchRequestDB.request_id == request_id)
+            result = await session.execute(query)
+            request = result.scalar_one_or_none()
+
+            return self._request_to_dict(request) if request else None
+
+    async def get_pending_requests(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get all pending patch requests"""
+        from sqlalchemy import select
+
+        async with self.db.get_session() as session:
+            query = select(PatchRequestDB).where(
+                PatchRequestDB.status == "PENDING_APPROVAL"
+            ).order_by(PatchRequestDB.created_at.desc())
+
+            if limit:
+                query = query.limit(limit)
+
+            result = await session.execute(query)
+            requests = result.scalars().all()
+
+            return [self._request_to_dict(r) for r in requests]
+
+    async def get_requests_by_status(
+        self,
+        status: str,
+        limit: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """Get patch requests by status"""
+        from sqlalchemy import select
+
+        async with self.db.get_session() as session:
+            query = select(PatchRequestDB).where(
+                PatchRequestDB.status == status
+            ).order_by(PatchRequestDB.created_at.desc())
+
+            if limit:
+                query = query.limit(limit)
+
+            result = await session.execute(query)
+            requests = result.scalars().all()
+
+            return [self._request_to_dict(r) for r in requests]
+
+    async def update_status(
+        self,
+        request_id: str,
+        status: str,
+        reviewed_by: Optional[str] = None,
+        review_comment: Optional[str] = None
+    ):
+        """Update patch request status"""
+        from sqlalchemy import select, update
+
+        async with self.db.get_session() as session:
+            updates = {
+                "status": status,
+                "reviewed_at": datetime.now()
+            }
+
+            if reviewed_by:
+                updates["reviewed_by"] = reviewed_by
+            if review_comment:
+                updates["review_comment"] = review_comment
+
+            if status == "APPLIED":
+                updates["applied_at"] = datetime.now()
+
+            stmt = update(PatchRequestDB).where(
+                PatchRequestDB.request_id == request_id
+            ).values(**updates)
+
+            await session.execute(stmt)
+            await session.commit()
+
+    async def record_application_error(self, request_id: str, error: str):
+        """Record error when applying patch"""
+        from sqlalchemy import update
+
+        async with self.db.get_session() as session:
+            stmt = update(PatchRequestDB).where(
+                PatchRequestDB.request_id == request_id
+            ).values(
+                status="FAILED",
+                application_error=error,
+                reviewed_at=datetime.now()
+            )
+            await session.execute(stmt)
+            await session.commit()
+
+    def _request_to_dict(self, request: PatchRequestDB) -> Dict[str, Any]:
+        """Convert patch request model to dict"""
+        return {
+            "request_id": request.request_id,
+            "created_at": request.created_at,
+            "target_file": request.target_file,
+            "reasoning": request.reasoning,
+            "diff": request.diff,
+            "new_code_blob": request.new_code_blob,
+            "component": request.component,
+            "improvement_type": request.improvement_type,
+            "confidence": request.confidence,
+            "status": request.status,
+            "reviewed_at": request.reviewed_at,
+            "reviewed_by": request.reviewed_by,
+            "review_comment": request.review_comment,
+            "applied_at": request.applied_at,
+            "application_error": request.application_error,
+            "feedback_ids": json.loads(request.feedback_ids) if request.feedback_ids else [],
+            "metrics": json.loads(request.metrics) if request.metrics else {}
         }

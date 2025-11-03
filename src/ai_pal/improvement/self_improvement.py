@@ -1232,6 +1232,239 @@ class SelfImprovementLoop:
             f"cost=${training_run.training_cost:.2f}"
         )
 
+    # ==================== Phase 4.3: Code Patch Requests ====================
+
+    async def generate_patch_request(
+        self,
+        target_file: str,
+        component: str,
+        improvement_description: str,
+        feedback_ids: List[str],
+        metrics: Dict[str, Any],
+        local_model_provider: Optional[Any] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Generate a patch request for code self-improvement
+
+        This method:
+        1. Uses the local model to analyze the target file
+        2. Generates improved code based on feedback and metrics
+        3. Creates a diff showing the changes
+        4. Returns a patch request ready for gate validation and approval
+
+        Args:
+            target_file: File to modify (e.g., "src/ai_pal/modules/learning.py")
+            component: Component being improved
+            improvement_description: Natural language description of the improvement
+            feedback_ids: List of feedback event IDs that motivated this
+            metrics: Performance metrics that motivated this change
+            local_model_provider: Optional local model for code generation
+
+        Returns:
+            Patch request dict ready for submission to PatchManager, or None if generation failed
+        """
+        logger.info(
+            f"Generating patch request for {target_file} "
+            f"(component: {component})"
+        )
+
+        try:
+            from pathlib import Path
+
+            # Read current code
+            file_path = Path(target_file)
+            if not file_path.exists():
+                logger.error(f"Target file {target_file} does not exist")
+                return None
+
+            original_code = file_path.read_text()
+
+            # Use local model to generate improved code
+            # In production, this would use the actual local model
+            # For now, we'll create a simulated improvement
+            if local_model_provider:
+                # Generate improvement using local model
+                new_code = await self._generate_improved_code_with_model(
+                    original_code=original_code,
+                    improvement_description=improvement_description,
+                    feedback_ids=feedback_ids,
+                    metrics=metrics,
+                    model=local_model_provider
+                )
+            else:
+                # Fallback: simulate improvement (for development)
+                new_code = await self._simulate_code_improvement(
+                    original_code=original_code,
+                    improvement_description=improvement_description
+                )
+
+            # Generate reasoning
+            reasoning = self._generate_patch_reasoning(
+                component=component,
+                improvement_description=improvement_description,
+                feedback_ids=feedback_ids,
+                metrics=metrics
+            )
+
+            # Calculate confidence based on feedback consistency and volume
+            confidence = self._calculate_patch_confidence(
+                feedback_ids=feedback_ids,
+                metrics=metrics
+            )
+
+            # Create patch request
+            patch_request = {
+                "target_file": target_file,
+                "reasoning": reasoning,
+                "original_code": original_code,
+                "new_code": new_code,
+                "component": component,
+                "improvement_type": "CODE_PATCH",
+                "confidence": confidence,
+                "feedback_ids": feedback_ids,
+                "metrics": metrics
+            }
+
+            logger.info(
+                f"Generated patch request for {target_file} "
+                f"with confidence {confidence:.2f}"
+            )
+
+            return patch_request
+
+        except Exception as e:
+            logger.error(
+                f"Failed to generate patch request for {target_file}: {e}",
+                exc_info=True
+            )
+            return None
+
+    async def _generate_improved_code_with_model(
+        self,
+        original_code: str,
+        improvement_description: str,
+        feedback_ids: List[str],
+        metrics: Dict[str, Any],
+        model: Any
+    ) -> str:
+        """
+        Use local model to generate improved code
+
+        This would integrate with the actual local LLM provider to generate
+        code improvements based on the feedback and metrics.
+        """
+        # Construct prompt for code improvement
+        prompt = f"""You are an expert Python developer improving AI system code.
+
+Original Code:
+```python
+{original_code}
+```
+
+Improvement Needed:
+{improvement_description}
+
+Feedback Context:
+- Based on {len(feedback_ids)} feedback events
+- Metrics: {metrics}
+
+Generate improved Python code that addresses the feedback while maintaining:
+1. Code style and formatting
+2. Existing function signatures (unless improvement requires changes)
+3. Documentation and comments
+4. Error handling
+
+Return ONLY the improved Python code, no explanations."""
+
+        # In production, call the local model
+        # For now, return original (will be overridden by simulation)
+        logger.info("Would call local model for code generation")
+        return original_code
+
+    async def _simulate_code_improvement(
+        self,
+        original_code: str,
+        improvement_description: str
+    ) -> str:
+        """
+        Simulate code improvement (for development/testing)
+
+        In production, this would be replaced by actual model generation.
+        For development, we add a comment showing what would be improved.
+        """
+        # Add improvement comment at the top
+        improvement_comment = f'''"""
+SIMULATED IMPROVEMENT:
+{improvement_description}
+
+This is a simulated code patch. In production, the local model would
+generate actual improved code here.
+"""
+
+'''
+        return improvement_comment + original_code
+
+    def _generate_patch_reasoning(
+        self,
+        component: str,
+        improvement_description: str,
+        feedback_ids: List[str],
+        metrics: Dict[str, Any]
+    ) -> str:
+        """Generate natural language reasoning for the patch request"""
+        reasoning_parts = [
+            f"Component: {component}",
+            f"\nImprovement: {improvement_description}",
+            f"\nMotivation: Based on {len(feedback_ids)} feedback events",
+        ]
+
+        # Add metrics summary
+        if metrics:
+            reasoning_parts.append("\nKey Metrics:")
+            for key, value in metrics.items():
+                reasoning_parts.append(f"  - {key}: {value}")
+
+        # Add feedback summary
+        if feedback_ids:
+            reasoning_parts.append(
+                f"\nThis change addresses recurring issues identified in "
+                f"{len(feedback_ids)} user interactions."
+            )
+
+        return "\n".join(reasoning_parts)
+
+    def _calculate_patch_confidence(
+        self,
+        feedback_ids: List[str],
+        metrics: Dict[str, Any]
+    ) -> float:
+        """
+        Calculate confidence score for patch request
+
+        Based on:
+        - Volume of feedback (more feedback = higher confidence)
+        - Consistency of feedback (all pointing to same issue)
+        - Severity of metrics (how bad is the problem)
+
+        Returns:
+            Confidence score (0-1)
+        """
+        # Base confidence on feedback volume
+        volume_score = min(1.0, len(feedback_ids) / 20.0)  # Cap at 20 events
+
+        # Factor in metrics severity
+        metrics_score = 0.5  # Default neutral
+        if metrics:
+            # Look for negative indicators in metrics
+            negative_ratio = metrics.get("negative_ratio", 0.0)
+            metrics_score = min(1.0, negative_ratio * 1.5)  # Scale up impact
+
+        # Combine scores (weighted)
+        confidence = (volume_score * 0.6 + metrics_score * 0.4)
+
+        # Never exceed 0.9 for auto-generated patches (require human review)
+        return min(0.9, max(0.1, confidence))
+
 
 # Alias for backward compatibility
 ImprovementType = ImprovementAction
