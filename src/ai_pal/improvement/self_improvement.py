@@ -18,7 +18,7 @@ Part of Phase 2: Advanced Monitoring & Self-Improvement
 
 import asyncio
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 import json
