@@ -664,9 +664,15 @@ async def _chat_session(system: IntegratedACSystem, user_id: str, local_only: bo
             if system.context_manager:
                 try:
                     from ai_pal.context.enhanced_context import MemoryEntry, MemoryType, MemoryPriority
+                    from datetime import datetime
+                    import uuid
+
                     await system.context_manager.store_memory(
                         MemoryEntry(
+                            memory_id=str(uuid.uuid4()),
+                            timestamp=datetime.now(),
                             user_id=user_id,
+                            session_id="chat_session",
                             content=processed_input,
                             memory_type=MemoryType.CONVERSATION,
                             priority=MemoryPriority.MEDIUM,
@@ -678,12 +684,12 @@ async def _chat_session(system: IntegratedACSystem, user_id: str, local_only: bo
 
             # === ORCHESTRATOR: Generate AI response ===
             try:
-                from ai_pal.orchestration.multi_model import TaskRequirements
+                from ai_pal.orchestration.multi_model import TaskRequirements, TaskComplexity
 
                 requirements = TaskRequirements(
                     task_type="chat",
-                    complexity="medium",
-                    user_preferences={"local_only": local_only}
+                    complexity=TaskComplexity.MEDIUM,
+                    requires_local=local_only
                 )
 
                 response = await system.orchestrator.route_request(
@@ -711,7 +717,10 @@ async def _chat_session(system: IntegratedACSystem, user_id: str, local_only: bo
                     try:
                         await system.context_manager.store_memory(
                             MemoryEntry(
+                                memory_id=str(uuid.uuid4()),
+                                timestamp=datetime.now(),
                                 user_id=user_id,
+                                session_id="chat_session",
                                 content=response.response_text,
                                 memory_type=MemoryType.CONVERSATION,
                                 priority=MemoryPriority.MEDIUM,

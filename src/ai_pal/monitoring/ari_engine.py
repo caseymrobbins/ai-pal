@@ -359,6 +359,7 @@ class PassiveLexicalAnalyzer:
         lengths = [len(self._tokenize_words(s)) for s in sentences]
         if len(lengths) < 2:
             variance = 0
+            mean_length = lengths[0] if lengths else 0
         else:
             mean_length = sum(lengths) / len(lengths)
             variance = sum((x - mean_length) ** 2 for x in lengths) / len(lengths)
