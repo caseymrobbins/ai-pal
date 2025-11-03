@@ -615,7 +615,7 @@ async def _chat_session(system: IntegratedACSystem, user_id: str, local_only: bo
             # === ARI ENGINE: Passive Lexical Analysis ===
             if system.ari_engine:
                 try:
-                    await system.ari_engine.passive_analyzer.analyze_text(
+                    await system.ari_engine.lexical_analyzer.analyze_text(
                         user_id=user_id,
                         text=user_input,
                         text_type="chat_message"
@@ -646,11 +646,16 @@ async def _chat_session(system: IntegratedACSystem, user_id: str, local_only: bo
             processed_input = user_input
             if system.privacy_manager:
                 try:
-                    detection = await system.privacy_manager.detect_pii(user_input)
-                    if detection.entities_found:
-                        processed_input = detection.scrubbed_text
+                    detections = await system.privacy_manager.detect_pii(user_input)
+                    if detections:  # List of PIIDetection objects
+                        # Scrub PII from input
+                        for detection in detections:
+                            processed_input = processed_input.replace(
+                                detection.text,
+                                f"[{detection.pii_type.value}]"
+                            )
                         console.print(
-                            f"[yellow]ℹ PII detected and protected ({len(detection.entities_found)} items)[/yellow]"
+                            f"[yellow]ℹ PII detected and protected ({len(detections)} items)[/yellow]"
                         )
                 except Exception as e:
                     logger.warning(f"PII detection failed: {e}")
@@ -658,7 +663,7 @@ async def _chat_session(system: IntegratedACSystem, user_id: str, local_only: bo
             # === CONTEXT: Store user message ===
             if system.context_manager:
                 try:
-                    from ..context.enhanced_context import MemoryEntry, MemoryType, MemoryPriority
+                    from ai_pal.context.enhanced_context import MemoryEntry, MemoryType, MemoryPriority
                     await system.context_manager.store_memory(
                         MemoryEntry(
                             user_id=user_id,
@@ -673,7 +678,7 @@ async def _chat_session(system: IntegratedACSystem, user_id: str, local_only: bo
 
             # === ORCHESTRATOR: Generate AI response ===
             try:
-                from ..orchestration.multi_model import TaskRequirements
+                from ai_pal.orchestration.multi_model import TaskRequirements
 
                 requirements = TaskRequirements(
                     task_type="chat",
@@ -723,7 +728,7 @@ async def _chat_session(system: IntegratedACSystem, user_id: str, local_only: bo
                 # === ARI ENGINE: Analyze AI response too ===
                 if system.ari_engine:
                     try:
-                        await system.ari_engine.passive_analyzer.analyze_text(
+                        await system.ari_engine.lexical_analyzer.analyze_text(
                             user_id=user_id,
                             text=response.response_text,
                             text_type="ai_response"
