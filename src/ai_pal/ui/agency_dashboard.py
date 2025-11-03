@@ -45,6 +45,7 @@ class DashboardSection(Enum):
     EPISTEMIC_DEBT = "epistemic_debt"
     IMPROVEMENTS = "improvements"
     CONTEXT_MEMORY = "context_memory"
+    PATCH_REQUESTS = "patch_requests"  # NEW: AI code modification requests
 
 
 @dataclass
@@ -237,6 +238,30 @@ class ARIEngineStatus:
 
 
 @dataclass
+class PatchRequestStatus:
+    """Patch request status for dashboard"""
+    # Summary
+    total_pending: int
+    total_approved: int
+    total_denied: int
+    total_applied: int
+    total_failed: int
+
+    # Pending requests (awaiting approval)
+    pending_requests: List[Dict[str, Any]] = field(default_factory=list)
+
+    # Recent activity
+    recent_approved: List[Dict[str, Any]] = field(default_factory=list)
+    recent_denied: List[Dict[str, Any]] = field(default_factory=list)
+
+    # Protected files
+    protected_files_count: int = 0
+
+    # Alerts
+    high_confidence_pending: int = 0  # Pending requests with confidence > 0.8
+
+
+@dataclass
 class RDIMonitorStatus:
     """
     RDI Monitor status for dashboard
@@ -285,6 +310,7 @@ class DashboardData:
     epistemic_debt: EpistemicDebtStatus = None
     improvements: ImprovementActivity = None
     context_memory: ContextMemoryStatus = None
+    patch_requests: Optional[PatchRequestStatus] = None  # NEW: AI code modification requests
 
     # Overall health score (0-100)
     overall_health_score: float = 0.0
@@ -314,7 +340,8 @@ class AgencyDashboard:
         context_manager: EnhancedContextManager,
         reporting_period_days: int = 7,
         ari_engine: Optional[ARIEngine] = None,  # NEW: Multi-layered skill atrophy detection
-        rdi_monitor: Optional[RDIMonitor] = None  # NEW: Privacy-first reality drift detection
+        rdi_monitor: Optional[RDIMonitor] = None,  # NEW: Privacy-first reality drift detection
+        patch_manager: Optional[Any] = None  # NEW: Patch request manager
     ):
         """
         Initialize Agency Dashboard
@@ -329,6 +356,7 @@ class AgencyDashboard:
             reporting_period_days: Default reporting period
             ari_engine: Optional ARI Engine for skill atrophy detection
             rdi_monitor: Optional RDI Monitor for reality drift detection
+            patch_manager: Optional Patch Manager for AI code modification requests
         """
         self.ari_monitor = ari_monitor
         self.edm_monitor = edm_monitor
@@ -339,6 +367,7 @@ class AgencyDashboard:
         self.reporting_period_days = reporting_period_days
         self.ari_engine = ari_engine
         self.rdi_monitor = rdi_monitor
+        self.patch_manager = patch_manager
 
         logger.info(
             f"Agency Dashboard initialized with {reporting_period_days}-day reporting period"
@@ -347,6 +376,8 @@ class AgencyDashboard:
             logger.info("ARI Engine integration enabled")
         if rdi_monitor:
             logger.info("RDI Monitor integration enabled (privacy-first)")
+        if patch_manager:
+            logger.info("Patch Manager integration enabled (AI code modification)")
 
     async def generate_dashboard(
         self,
@@ -401,6 +432,9 @@ class AgencyDashboard:
         if DashboardSection.CONTEXT_MEMORY in sections:
             tasks.append(self._generate_context_memory(user_id))
 
+        if DashboardSection.PATCH_REQUESTS in sections and self.patch_manager:
+            tasks.append(self._generate_patch_requests())
+
         # Execute all section generation in parallel
         results = await asyncio.gather(*tasks)
 
@@ -414,6 +448,7 @@ class AgencyDashboard:
         epistemic_debt = None
         improvements = None
         context_memory = None
+        patch_requests = None
 
         if DashboardSection.AGENCY_METRICS in sections:
             agency_metrics = results[result_idx]
@@ -447,6 +482,10 @@ class AgencyDashboard:
             context_memory = results[result_idx]
             result_idx += 1
 
+        if DashboardSection.PATCH_REQUESTS in sections and self.patch_manager:
+            patch_requests = results[result_idx]
+            result_idx += 1
+
         # Calculate overall health score
         health_score = self._calculate_health_score(
             agency_metrics,
@@ -473,6 +512,15 @@ class AgencyDashboard:
         if epistemic_debt and epistemic_debt.high_severity_count > 0:
             system_alerts.extend(epistemic_debt.critical_alerts)
 
+        if patch_requests and patch_requests.total_pending > 0:
+            system_alerts.append(
+                f"💡 {patch_requests.total_pending} AI code modification request(s) pending approval"
+            )
+            if patch_requests.high_confidence_pending > 0:
+                system_alerts.append(
+                    f"   ⭐ {patch_requests.high_confidence_pending} high-confidence request(s) awaiting review"
+                )
+
         dashboard = DashboardData(
             user_id=user_id,
             generated_at=datetime.now(),
@@ -485,6 +533,7 @@ class AgencyDashboard:
             epistemic_debt=epistemic_debt,
             improvements=improvements,
             context_memory=context_memory,
+            patch_requests=patch_requests,
             overall_health_score=health_score,
             system_alerts=system_alerts
         )
@@ -1049,6 +1098,92 @@ class AgencyDashboard:
             rdi_history=rdi_history,
             privacy_notice=rdi_data.get("_privacy_notice", "This data is private and stored only on your device."),
             opted_into_aggregates=opted_in
+        )
+
+    async def _generate_patch_requests(self) -> PatchRequestStatus:
+        """Generate patch request status section"""
+        if not self.patch_manager:
+            logger.warning("Patch Manager not available")
+            return PatchRequestStatus(
+                total_pending=0,
+                total_approved=0,
+                total_denied=0,
+                total_applied=0,
+                total_failed=0
+            )
+
+        # Get all requests by status
+        pending = await self.patch_manager.get_pending_requests(limit=20)
+        approved = await self.patch_manager.patch_repository.get_requests_by_status(
+            "APPROVED", limit=10
+        )
+        denied = await self.patch_manager.patch_repository.get_requests_by_status(
+            "DENIED", limit=10
+        )
+        applied = await self.patch_manager.patch_repository.get_requests_by_status(
+            "APPLIED", limit=10
+        )
+        failed = await self.patch_manager.patch_repository.get_requests_by_status(
+            "FAILED", limit=10
+        )
+
+        # Count high confidence pending
+        high_confidence_pending = sum(
+            1 for req in pending if req["confidence"] > 0.8
+        )
+
+        # Format pending requests for display
+        pending_formatted = [
+            {
+                "request_id": req["request_id"],
+                "target_file": req["target_file"],
+                "component": req["component"],
+                "confidence": req["confidence"],
+                "reasoning": req["reasoning"][:200] + "..." if len(req["reasoning"]) > 200 else req["reasoning"],
+                "created_at": req["created_at"].isoformat() if isinstance(req["created_at"], datetime) else req["created_at"],
+                "diff_preview": req["diff"][:500] + "..." if len(req["diff"]) > 500 else req["diff"]
+            }
+            for req in pending[:10]  # Limit to 10 for dashboard
+        ]
+
+        # Format recent approved/denied
+        recent_approved_formatted = [
+            {
+                "request_id": req["request_id"],
+                "target_file": req["target_file"],
+                "component": req["component"],
+                "reviewed_by": req["reviewed_by"],
+                "reviewed_at": req["reviewed_at"].isoformat() if isinstance(req["reviewed_at"], datetime) else req["reviewed_at"]
+            }
+            for req in approved[:5]
+        ]
+
+        recent_denied_formatted = [
+            {
+                "request_id": req["request_id"],
+                "target_file": req["target_file"],
+                "component": req["component"],
+                "reviewed_by": req["reviewed_by"],
+                "reviewed_at": req["reviewed_at"].isoformat() if isinstance(req["reviewed_at"], datetime) else req["reviewed_at"],
+                "review_comment": req["review_comment"]
+            }
+            for req in denied[:5]
+        ]
+
+        # Get protected files count
+        protected_files = self.patch_manager.get_protected_files()
+
+        return PatchRequestStatus(
+            total_pending=len(pending),
+            total_approved=len(approved),
+            total_denied=len(denied),
+            total_applied=len(applied),
+            total_failed=len(failed),
+            pending_requests=pending_formatted,
+            recent_approved=recent_approved_formatted,
+            recent_denied=recent_denied_formatted,
+            protected_files_count=len(protected_files),
+            high_confidence_pending=high_confidence_pending
         )
 
     def _calculate_health_score(
