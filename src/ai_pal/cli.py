@@ -164,8 +164,8 @@ def start(
 
             # Show goal breakdown
             console.print(Panel.fit(
-                f"[bold green]Goal Clarity: {goal_packet.clarity_score:.0%}[/bold green]\n"
-                f"[dim]Difficulty: {goal_packet.estimated_difficulty:.0%}[/dim]",
+                f"[bold green]Goal Value: {goal_packet.estimated_value:.0%}[/bold green]\n"
+                f"[dim]Effort Required: {goal_packet.estimated_effort:.0%}[/dim]",
                 title="Goal Analysis",
                 border_style="green"
             ))
@@ -180,7 +180,7 @@ def start(
                 table.add_row(
                     str(i),
                     block.title,
-                    f"{block.duration_minutes}min"
+                    f"{block.time_block_size.value}min"
                 )
 
             console.print(table)
