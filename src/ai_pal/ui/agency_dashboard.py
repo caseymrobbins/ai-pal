@@ -26,6 +26,8 @@ from loguru import logger
 # Import monitoring systems
 from ..monitoring.ari_monitor import ARIMonitor, AgencyTrend
 from ..monitoring.edm_monitor import EDMMonitor, DebtSeverity
+from ..monitoring.ari_engine import ARIEngine, ARISignalLevel
+from ..monitoring.rdi_monitor import RDIMonitor, RDILevel
 from ..improvement.self_improvement import SelfImprovementLoop, ImprovementStatus
 from ..privacy.advanced_privacy import AdvancedPrivacyManager, ConsentLevel
 from ..orchestration.multi_model import MultiModelOrchestrator, ModelProvider
@@ -36,6 +38,8 @@ class DashboardSection(Enum):
     """Dashboard sections"""
     OVERVIEW = "overview"
     AGENCY_METRICS = "agency_metrics"
+    ARI_ENGINE = "ari_engine"  # NEW: Skill atrophy detection
+    RDI_MONITOR = "rdi_monitor"  # NEW: Reality drift detection (PRIVATE)
     PRIVACY_STATUS = "privacy_status"
     MODEL_USAGE = "model_usage"
     EPISTEMIC_DEBT = "epistemic_debt"
@@ -201,6 +205,71 @@ class ContextMemoryStatus:
 
 
 @dataclass
+class ARIEngineStatus:
+    """ARI Engine status for dashboard"""
+    # Overall ARI score
+    overall_ari: float  # 0-1, where 1 is best
+    signal_level: str  # "high", "medium", "low", "critical"
+
+    # Component scores
+    lexical_ari: float  # From passive text analysis
+    interaction_ari: float  # From Socratic co-pilot
+    baseline_deviation: float  # Deviation from deep dive baseline
+
+    # Trend analysis
+    trend_direction: str  # "improving", "stable", "declining"
+    days_in_trend: int
+
+    # Alerts and recommendations
+    alerts: List[str] = field(default_factory=list)
+    recommendations: List[str] = field(default_factory=list)
+
+    # Historical data (timestamp, ari_score)
+    ari_history: List[tuple] = field(default_factory=list)
+
+    # Recent UCC responses (capability checkpoints)
+    recent_uccs: List[Dict[str, Any]] = field(default_factory=list)
+
+    # Deep dive baseline status
+    has_baseline: bool = False
+    baseline_domain: Optional[str] = None
+    baseline_established_at: Optional[datetime] = None
+
+
+@dataclass
+class RDIMonitorStatus:
+    """
+    RDI Monitor status for dashboard
+
+    **PRIVACY:** This data is PRIVATE and shown only to the user.
+    Never shared with platform or third parties.
+    """
+    # Overall RDI score
+    overall_rdi: float  # 0-1, where 0 is aligned, 1 is maximum drift
+    rdi_level: str  # "aligned", "minor_drift", "moderate_drift", "significant_drift", "critical_drift"
+
+    # Component scores
+    semantic_drift: float  # Semantic understanding drift
+    factual_drift: float  # Factual baseline drift
+    logical_drift: float  # Logical reasoning drift
+
+    # Trend analysis
+    trend_direction: str  # "stable", "increasing", "decreasing"
+
+    # Private alerts (shown only to user)
+    private_alerts: List[str] = field(default_factory=list)
+
+    # Historical data (timestamp, rdi_score)
+    rdi_history: List[tuple] = field(default_factory=list)
+
+    # Privacy notice
+    privacy_notice: str = "This data is private and stored only on your device."
+
+    # Aggregate opt-in status
+    opted_into_aggregates: bool = False
+
+
+@dataclass
 class DashboardData:
     """Complete dashboard data"""
     user_id: str
@@ -209,14 +278,16 @@ class DashboardData:
 
     # Section data
     agency_metrics: AgencyMetrics
-    privacy_status: PrivacyStatus
-    model_usage: ModelUsageStats
-    epistemic_debt: EpistemicDebtStatus
-    improvements: ImprovementActivity
-    context_memory: ContextMemoryStatus
+    ari_engine_status: Optional[ARIEngineStatus] = None  # NEW: Skill atrophy detection
+    rdi_monitor_status: Optional[RDIMonitorStatus] = None  # NEW: Reality drift (PRIVATE)
+    privacy_status: PrivacyStatus = None
+    model_usage: ModelUsageStats = None
+    epistemic_debt: EpistemicDebtStatus = None
+    improvements: ImprovementActivity = None
+    context_memory: ContextMemoryStatus = None
 
     # Overall health score (0-100)
-    overall_health_score: float
+    overall_health_score: float = 0.0
 
     # System alerts (high priority)
     system_alerts: List[str] = field(default_factory=list)
@@ -241,7 +312,9 @@ class AgencyDashboard:
         privacy_manager: AdvancedPrivacyManager,
         orchestrator: MultiModelOrchestrator,
         context_manager: EnhancedContextManager,
-        reporting_period_days: int = 7
+        reporting_period_days: int = 7,
+        ari_engine: Optional[ARIEngine] = None,  # NEW: Multi-layered skill atrophy detection
+        rdi_monitor: Optional[RDIMonitor] = None  # NEW: Privacy-first reality drift detection
     ):
         """
         Initialize Agency Dashboard
@@ -254,6 +327,8 @@ class AgencyDashboard:
             orchestrator: Multi-model orchestrator
             context_manager: Context manager
             reporting_period_days: Default reporting period
+            ari_engine: Optional ARI Engine for skill atrophy detection
+            rdi_monitor: Optional RDI Monitor for reality drift detection
         """
         self.ari_monitor = ari_monitor
         self.edm_monitor = edm_monitor
@@ -262,10 +337,16 @@ class AgencyDashboard:
         self.orchestrator = orchestrator
         self.context_manager = context_manager
         self.reporting_period_days = reporting_period_days
+        self.ari_engine = ari_engine
+        self.rdi_monitor = rdi_monitor
 
         logger.info(
             f"Agency Dashboard initialized with {reporting_period_days}-day reporting period"
         )
+        if ari_engine:
+            logger.info("ARI Engine integration enabled")
+        if rdi_monitor:
+            logger.info("RDI Monitor integration enabled (privacy-first)")
 
     async def generate_dashboard(
         self,
@@ -299,6 +380,12 @@ class AgencyDashboard:
         if DashboardSection.AGENCY_METRICS in sections:
             tasks.append(self._generate_agency_metrics(user_id, period))
 
+        if DashboardSection.ARI_ENGINE in sections and self.ari_engine:
+            tasks.append(self._generate_ari_engine_status(user_id, period))
+
+        if DashboardSection.RDI_MONITOR in sections and self.rdi_monitor:
+            tasks.append(self._generate_rdi_monitor_status(user_id, period))
+
         if DashboardSection.PRIVACY_STATUS in sections:
             tasks.append(self._generate_privacy_status(user_id))
 
@@ -320,6 +407,8 @@ class AgencyDashboard:
         # Map results to sections
         result_idx = 0
         agency_metrics = None
+        ari_engine_status = None
+        rdi_monitor_status = None
         privacy_status = None
         model_usage = None
         epistemic_debt = None
@@ -328,6 +417,14 @@ class AgencyDashboard:
 
         if DashboardSection.AGENCY_METRICS in sections:
             agency_metrics = results[result_idx]
+            result_idx += 1
+
+        if DashboardSection.ARI_ENGINE in sections and self.ari_engine:
+            ari_engine_status = results[result_idx]
+            result_idx += 1
+
+        if DashboardSection.RDI_MONITOR in sections and self.rdi_monitor:
+            rdi_monitor_status = results[result_idx]
             result_idx += 1
 
         if DashboardSection.PRIVACY_STATUS in sections:
@@ -362,6 +459,14 @@ class AgencyDashboard:
         if agency_metrics and agency_metrics.agency_trend == AgencyTrend.CRITICAL:
             system_alerts.append("🚨 CRITICAL: Severe agency loss detected")
 
+        if ari_engine_status and ari_engine_status.signal_level == "critical":
+            system_alerts.append("🚨 CRITICAL: Severe skill atrophy detected")
+        elif ari_engine_status and ari_engine_status.signal_level == "low":
+            system_alerts.append("⚠️ LOW ARI: Skill retention concerns detected")
+
+        if rdi_monitor_status and rdi_monitor_status.rdi_level in ["significant_drift", "critical_drift"]:
+            system_alerts.append("⚠️ Reality drift detected (Private alert)")
+
         if privacy_status and privacy_status.budget_near_limit:
             system_alerts.append("⚠️ Privacy budget near limit")
 
@@ -373,6 +478,8 @@ class AgencyDashboard:
             generated_at=datetime.now(),
             reporting_period_days=period,
             agency_metrics=agency_metrics,
+            ari_engine_status=ari_engine_status,
+            rdi_monitor_status=rdi_monitor_status,
             privacy_status=privacy_status,
             model_usage=model_usage,
             epistemic_debt=epistemic_debt,
@@ -806,6 +913,142 @@ class AgencyDashboard:
             unconsolidated_count=unconsolidated,
             needs_consolidation=needs_consolidation,
             recent_memories=recent_memories
+        )
+
+    async def _generate_ari_engine_status(
+        self,
+        user_id: str,
+        period_days: int
+    ) -> ARIEngineStatus:
+        """Generate ARI Engine status section"""
+        if not self.ari_engine:
+            logger.warning("ARI Engine not available")
+            return None
+
+        # Calculate comprehensive ARI
+        ari_score = self.ari_engine.calculate_comprehensive_ari(user_id)
+
+        # Get ARI history
+        ari_history_scores = self.ari_engine.get_ari_history(user_id, days=period_days)
+        ari_history = [
+            (score.timestamp.isoformat(), score.overall_ari)
+            for score in ari_history_scores
+        ]
+
+        # Get recent UCC responses
+        if user_id in self.ari_engine.socratic_copilot.ucc_history:
+            uccs = self.ari_engine.socratic_copilot.ucc_history[user_id]
+            recent_uccs = sorted(uccs, key=lambda u: u.created_at, reverse=True)[:5]
+            recent_ucc_data = [
+                {
+                    "question": ucc.question[:100],
+                    "response_type": ucc.response_type.value,
+                    "capability": ucc.capability_demonstrated,
+                    "signal": ucc.ari_signal.value,
+                    "timestamp": ucc.created_at.isoformat()
+                }
+                for ucc in recent_uccs
+            ]
+        else:
+            recent_ucc_data = []
+
+        # Check for deep dive baseline
+        has_baseline = False
+        baseline_domain = None
+        baseline_established_at = None
+
+        if user_id in self.ari_engine.deep_dive.baselines:
+            # Get first baseline (any domain)
+            baselines = self.ari_engine.deep_dive.baselines[user_id]
+            if baselines:
+                first_domain = list(baselines.keys())[0]
+                baseline = baselines[first_domain]
+                has_baseline = True
+                baseline_domain = baseline.domain
+                baseline_established_at = baseline.established_at
+
+        # Generate recommendations
+        recommendations = []
+        if ari_score.signal_level == ARISignalLevel.LOW or ari_score.signal_level == ARISignalLevel.CRITICAL:
+            recommendations.append("Consider completing a Deep Dive session to establish baseline")
+            recommendations.append("Engage more deeply with task delegation questions")
+
+        if ari_score.trend_direction == "declining":
+            recommendations.append("Skill retention concerns detected - try hands-on practice")
+
+        if not has_baseline:
+            recommendations.append("Complete a Deep Dive session to establish your capability baseline")
+
+        return ARIEngineStatus(
+            overall_ari=ari_score.overall_ari,
+            signal_level=ari_score.signal_level.value,
+            lexical_ari=ari_score.lexical_ari,
+            interaction_ari=ari_score.interaction_ari,
+            baseline_deviation=ari_score.baseline_deviation,
+            trend_direction=ari_score.trend_direction,
+            days_in_trend=ari_score.days_in_trend,
+            alerts=ari_score.alerts,
+            recommendations=recommendations,
+            ari_history=ari_history,
+            recent_uccs=recent_ucc_data,
+            has_baseline=has_baseline,
+            baseline_domain=baseline_domain,
+            baseline_established_at=baseline_established_at
+        )
+
+    async def _generate_rdi_monitor_status(
+        self,
+        user_id: str,
+        period_days: int
+    ) -> RDIMonitorStatus:
+        """
+        Generate RDI Monitor status section
+
+        **PRIVACY:** This data is PRIVATE and shown only to the user.
+        """
+        if not self.rdi_monitor:
+            logger.warning("RDI Monitor not available")
+            return None
+
+        # Get RDI data from monitor (private, for user only)
+        rdi_data = self.rdi_monitor.get_user_rdi_for_dashboard(user_id)
+
+        if not rdi_data.get("rdi_available"):
+            # No RDI data yet
+            return RDIMonitorStatus(
+                overall_rdi=0.0,
+                rdi_level="aligned",
+                semantic_drift=0.0,
+                factual_drift=0.0,
+                logical_drift=0.0,
+                trend_direction="stable",
+                private_alerts=["No RDI data yet - continue using the system to establish baseline"],
+                rdi_history=[],
+                privacy_notice=rdi_data.get("_privacy_notice", "This data is private and stored only on your device."),
+                opted_into_aggregates=False
+        )
+
+        # Check if user opted into aggregates
+        hashed_user_id = self.rdi_monitor._hash_user_id(user_id)
+        opted_in = hashed_user_id in self.rdi_monitor._aggregate_opt_ins
+
+        # Build RDI history from dashboard data
+        rdi_history = [
+            (entry["timestamp"], entry["rdi"])
+            for entry in rdi_data.get("history", [])
+        ]
+
+        return RDIMonitorStatus(
+            overall_rdi=rdi_data["current_rdi"],
+            rdi_level=rdi_data["rdi_level"],
+            semantic_drift=rdi_data["semantic_drift"],
+            factual_drift=rdi_data["factual_drift"],
+            logical_drift=rdi_data["logical_drift"],
+            trend_direction=rdi_data["trend"],
+            private_alerts=rdi_data.get("alerts", []),
+            rdi_history=rdi_history,
+            privacy_notice=rdi_data.get("_privacy_notice", "This data is private and stored only on your device."),
+            opted_into_aggregates=opted_in
         )
 
     def _calculate_health_score(
