@@ -567,6 +567,9 @@ def teach_topics():
 def chat(
     local_only: bool = typer.Option(
         False, "--local-only", "-l", help="Use only local models"
+    ),
+    model: str = typer.Option(
+        "phi-2", "--model", "-m", help="Preferred model (phi-2, phi-3, tinyllama, llama3.2)"
     )
 ):
     """Start an interactive chat session with AI-PAL"""
@@ -584,17 +587,17 @@ def chat(
         border_style="cyan"
     ))
 
-    asyncio.run(_chat_session(system, user_id, local_only))
+    asyncio.run(_chat_session(system, user_id, local_only, model))
 
 
-async def _chat_session(system: IntegratedACSystem, user_id: str, local_only: bool):
+async def _chat_session(system: IntegratedACSystem, user_id: str, local_only: bool, preferred_model: str = "phi-2"):
     """Run interactive chat session with full AC-AI integration"""
 
     if not system.orchestrator:
         console.print("[red]✗[/red] Model orchestrator not available")
         raise typer.Exit(1)
 
-    console.print("\n[dim green]Ready! Start chatting...[/dim green]\n")
+    console.print(f"\n[dim green]Ready! Using preferred model: {preferred_model}[/dim green]\n")
 
     # Chat loop
     while True:
@@ -678,7 +681,12 @@ async def _chat_session(system: IntegratedACSystem, user_id: str, local_only: bo
 
             # === ORCHESTRATOR: Generate AI response ===
             try:
-                from ai_pal.orchestration.multi_model import TaskRequirements, TaskComplexity
+                from ai_pal.orchestration.multi_model import (
+                    TaskRequirements,
+                    TaskComplexity,
+                    ModelProvider
+                )
+                from ai_pal.models.base import LLMRequest
 
                 requirements = TaskRequirements(
                     task_type="chat",
@@ -686,11 +694,45 @@ async def _chat_session(system: IntegratedACSystem, user_id: str, local_only: bo
                     requires_local=local_only
                 )
 
-                response = await system.orchestrator.route_request(
-                    user_id=user_id,
-                    query=processed_input,
-                    requirements=requirements
-                )
+                # If user specified a preferred model, use it directly with local provider
+                if preferred_model and preferred_model in ["phi-2", "phi-3", "tinyllama", "llama3.2"]:
+                    # Create LLM request
+                    llm_request = LLMRequest(
+                        prompt=processed_input,
+                        max_tokens=2000,
+                        temperature=0.7,
+                        top_p=0.9
+                    )
+
+                    # Use local provider directly
+                    from ai_pal.models.local import LocalLLMProvider
+                    local_provider = LocalLLMProvider()
+
+                    console.print(f"[dim]Using {preferred_model}...[/dim]")
+
+                    llm_response = await local_provider.generate(llm_request, preferred_model)
+
+                    # Convert to orchestrator response format
+                    class SimpleResponse:
+                        def __init__(self, text, provider, model, tokens):
+                            self.response_text = text
+                            self.provider = provider
+                            self.model_name = model
+                            self.tokens_used = tokens
+
+                    response = SimpleResponse(
+                        text=llm_response.generated_text,
+                        provider=ModelProvider.LOCAL,
+                        model=preferred_model,
+                        tokens=llm_response.total_tokens
+                    )
+                else:
+                    # Use orchestrator's automatic model selection
+                    response = await system.orchestrator.route_request(
+                        user_id=user_id,
+                        query=processed_input,
+                        requirements=requirements
+                    )
 
                 # Display AI response
                 from rich.markdown import Markdown
