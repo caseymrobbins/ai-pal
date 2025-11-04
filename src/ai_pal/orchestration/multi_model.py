@@ -850,15 +850,57 @@ class MultiModelOrchestrator:
         # Select model
         selection = await self.select_model(requirements, opt_goal)
 
-        # Execute model
-        response = await self.execute_model(
-            provider=selection.provider,
-            model_name=selection.model_name,
-            prompt=prompt,
-            system_prompt=system_prompt,
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
+        # Execute model with automatic cloud fallback
+        try:
+            response = await self.execute_model(
+                provider=selection.provider,
+                model_name=selection.model_name,
+                prompt=prompt,
+                system_prompt=system_prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+        except (RuntimeError, ConnectionError) as e:
+            # Local model failed, try cloud fallback
+            logger.warning(
+                f"Local model {selection.model_name} failed: {e}. "
+                f"Attempting cloud fallback..."
+            )
+
+            # Try cloud providers in order of preference
+            cloud_providers = [
+                (ModelProvider.OPENAI, "gpt-3.5-turbo"),
+                (ModelProvider.ANTHROPIC, "claude-3-haiku-20240307"),
+                (ModelProvider.COHERE, "command"),
+            ]
+
+            fallback_error = None
+            for provider, model in cloud_providers:
+                try:
+                    logger.info(f"Trying cloud fallback: {provider.value}:{model}")
+                    response = await self.execute_model(
+                        provider=provider,
+                        model_name=model,
+                        prompt=prompt,
+                        system_prompt=system_prompt,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                    )
+                    logger.info(f"✓ Cloud fallback successful: {provider.value}:{model}")
+                    break  # Success!
+                except Exception as fallback_e:
+                    fallback_error = fallback_e
+                    logger.debug(f"Cloud fallback {provider.value} failed: {fallback_e}")
+                    continue
+            else:
+                # All fallbacks failed
+                logger.error("All local and cloud fallbacks failed")
+                raise RuntimeError(
+                    f"All generation methods failed. "
+                    f"Local: {e}. "
+                    f"Cloud: {fallback_error}. "
+                    f"Please check API keys or install transformers/ollama."
+                )
 
         # Return simplified dict
         return {
