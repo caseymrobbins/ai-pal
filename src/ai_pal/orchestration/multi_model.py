@@ -107,6 +107,9 @@ class TaskRequirements:
     sensitive_data: bool = False
     requires_local: bool = False
 
+    # Model preference
+    preferred_model: Optional[str] = None  # User's preferred model (e.g., "tinyllama", "phi-2")
+
     # Context
     estimated_input_tokens: int = 100
     estimated_output_tokens: int = 200
@@ -357,6 +360,9 @@ class MultiModelOrchestrator:
         """
         Select optimal model for task
 
+        Respects user's preferred_model for simple tasks, but may override
+        for complex tasks that require more capable models.
+
         Args:
             requirements: Task requirements
             optimization_goal: Optimization strategy (uses default if None)
@@ -365,6 +371,31 @@ class MultiModelOrchestrator:
             Model selection with reasoning
         """
         goal = optimization_goal or self.default_optimization_goal
+
+        # Check if user has a preferred model and task is appropriate for it
+        if requirements.preferred_model:
+            # For simple/moderate tasks (including chat), respect user preference
+            if requirements.complexity in [TaskComplexity.TRIVIAL, TaskComplexity.SIMPLE, TaskComplexity.MODERATE]:
+                logger.info(
+                    f"Using user's preferred model '{requirements.preferred_model}' "
+                    f"for {requirements.complexity.value} task"
+                )
+                return ModelSelection(
+                    provider=ModelProvider.LOCAL,
+                    model_name=requirements.preferred_model,
+                    confidence=0.85,
+                    estimated_cost=0.0,
+                    estimated_latency_ms=200,
+                    expected_quality=0.75,
+                    selection_reason=f"User preference: {requirements.preferred_model}",
+                    optimization_goal=goal
+                )
+            else:
+                # For complex/expert tasks, override to more capable model
+                logger.info(
+                    f"User prefers '{requirements.preferred_model}' but task complexity "
+                    f"is {requirements.complexity.value} - using more capable model for best results"
+                )
 
         # Filter models by requirements
         candidate_models = self._filter_by_requirements(requirements)

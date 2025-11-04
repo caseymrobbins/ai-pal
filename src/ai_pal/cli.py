@@ -683,56 +683,24 @@ async def _chat_session(system: IntegratedACSystem, user_id: str, local_only: bo
             try:
                 from ai_pal.orchestration.multi_model import (
                     TaskRequirements,
-                    TaskComplexity,
-                    ModelProvider
+                    TaskComplexity
                 )
-                from ai_pal.models.base import LLMRequest
 
                 requirements = TaskRequirements(
                     task_type="chat",
                     complexity=TaskComplexity.MODERATE,
-                    requires_local=local_only
+                    requires_local=local_only,
+                    preferred_model=preferred_model  # Pass preference to orchestrator
                 )
 
-                # If user specified a preferred model, use it directly with local provider
-                if preferred_model and preferred_model in ["phi-2", "phi-3", "tinyllama", "llama3.2"]:
-                    # Create LLM request
-                    llm_request = LLMRequest(
-                        prompt=processed_input,
-                        max_tokens=2000,
-                        temperature=0.7,
-                        top_p=0.9
-                    )
-
-                    # Use local provider directly
-                    from ai_pal.models.local import LocalLLMProvider
-                    local_provider = LocalLLMProvider()
-
-                    console.print(f"[dim]Using {preferred_model}...[/dim]")
-
-                    llm_response = await local_provider.generate(llm_request, preferred_model)
-
-                    # Convert to orchestrator response format
-                    class SimpleResponse:
-                        def __init__(self, text, provider, model, tokens):
-                            self.response_text = text
-                            self.provider = provider
-                            self.model_name = model
-                            self.tokens_used = tokens
-
-                    response = SimpleResponse(
-                        text=llm_response.generated_text,
-                        provider=ModelProvider.LOCAL,
-                        model=preferred_model,
-                        tokens=llm_response.total_tokens
-                    )
-                else:
-                    # Use orchestrator's automatic model selection
-                    response = await system.orchestrator.route_request(
-                        user_id=user_id,
-                        query=processed_input,
-                        requirements=requirements
-                    )
+                # Let orchestrator decide based on task complexity and preference
+                # Simple tasks → uses preferred_model
+                # Complex tasks → may override to more capable model
+                response = await system.orchestrator.route_request(
+                    user_id=user_id,
+                    query=processed_input,
+                    requirements=requirements
+                )
 
                 # Display AI response
                 from rich.markdown import Markdown
