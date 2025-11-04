@@ -29,6 +29,9 @@ from ai_pal.models.local import LocalLLMProvider
 from ai_pal.models.anthropic_provider import AnthropicProvider
 from ai_pal.models.openai_provider import OpenAIProvider
 from ai_pal.models.google_provider import GoogleProvider
+from ai_pal.models.cohere_provider import CohereProvider
+from ai_pal.models.mistral_provider import MistralProvider
+from ai_pal.models.groq_provider import GroqProvider
 from ai_pal.models.base import LLMRequest, LLMResponse
 
 
@@ -39,6 +42,8 @@ class ModelProvider(Enum):
     ANTHROPIC = "anthropic"
     GOOGLE = "google"  # Google Gemini
     COHERE = "cohere"
+    MISTRAL = "mistral"
+    GROQ = "groq"  # Ultra-fast inference
 
 
 class TaskComplexity(Enum):
@@ -378,6 +383,149 @@ class MultiModelOrchestrator:
             typical_latency_ms=1000,
             availability=0.998,
             data_retention_days=18,
+            trains_on_data=False,
+            local_execution=False
+        )
+
+        # Cohere models
+        self.model_capabilities[(ModelProvider.COHERE, "command-r-plus")] = ModelCapabilities(
+            provider=ModelProvider.COHERE,
+            model_name="command-r-plus",
+            max_tokens=4096,
+            supports_streaming=True,
+            supports_functions=True,
+            supports_vision=False,
+            reasoning_capability=0.88,
+            knowledge_breadth=0.90,
+            code_capability=0.85,
+            creative_capability=0.85,
+            input_cost=0.003,  # $3.00 per 1M tokens
+            output_cost=0.015,  # $15.00 per 1M tokens
+            typical_latency_ms=1200,
+            availability=0.995,
+            data_retention_days=30,
+            trains_on_data=False,
+            local_execution=False
+        )
+
+        self.model_capabilities[(ModelProvider.COHERE, "command-r")] = ModelCapabilities(
+            provider=ModelProvider.COHERE,
+            model_name="command-r",
+            max_tokens=4096,
+            supports_streaming=True,
+            supports_functions=True,
+            supports_vision=False,
+            reasoning_capability=0.80,
+            knowledge_breadth=0.85,
+            code_capability=0.78,
+            creative_capability=0.80,
+            input_cost=0.0005,  # $0.50 per 1M tokens
+            output_cost=0.0015,  # $1.50 per 1M tokens
+            typical_latency_ms=900,
+            availability=0.998,
+            data_retention_days=30,
+            trains_on_data=False,
+            local_execution=False
+        )
+
+        # Mistral AI models
+        self.model_capabilities[(ModelProvider.MISTRAL, "mistral-large-latest")] = ModelCapabilities(
+            provider=ModelProvider.MISTRAL,
+            model_name="mistral-large-latest",
+            max_tokens=32000,
+            supports_streaming=True,
+            supports_functions=True,
+            supports_vision=False,
+            reasoning_capability=0.92,
+            knowledge_breadth=0.90,
+            code_capability=0.90,
+            creative_capability=0.88,
+            input_cost=0.004,  # $4.00 per 1M tokens
+            output_cost=0.012,  # $12.00 per 1M tokens
+            typical_latency_ms=1400,
+            availability=0.995,
+            data_retention_days=0,  # No retention on paid tier
+            trains_on_data=False,
+            local_execution=False
+        )
+
+        self.model_capabilities[(ModelProvider.MISTRAL, "mistral-small-latest")] = ModelCapabilities(
+            provider=ModelProvider.MISTRAL,
+            model_name="mistral-small-latest",
+            max_tokens=32000,
+            supports_streaming=True,
+            supports_functions=True,
+            supports_vision=False,
+            reasoning_capability=0.78,
+            knowledge_breadth=0.80,
+            code_capability=0.80,
+            creative_capability=0.75,
+            input_cost=0.001,  # $1.00 per 1M tokens
+            output_cost=0.003,  # $3.00 per 1M tokens
+            typical_latency_ms=800,
+            availability=0.998,
+            data_retention_days=0,
+            trains_on_data=False,
+            local_execution=False
+        )
+
+        # Groq models (ultra-fast inference)
+        self.model_capabilities[(ModelProvider.GROQ, "llama-3.1-70b-versatile")] = ModelCapabilities(
+            provider=ModelProvider.GROQ,
+            model_name="llama-3.1-70b-versatile",
+            max_tokens=8192,
+            supports_streaming=True,
+            supports_functions=False,
+            supports_vision=False,
+            reasoning_capability=0.88,
+            knowledge_breadth=0.87,
+            code_capability=0.85,
+            creative_capability=0.85,
+            input_cost=0.00059,  # $0.59 per 1M tokens
+            output_cost=0.00079,  # $0.79 per 1M tokens
+            typical_latency_ms=150,  # ULTRA FAST!
+            availability=0.998,
+            data_retention_days=30,
+            trains_on_data=False,
+            local_execution=False
+        )
+
+        self.model_capabilities[(ModelProvider.GROQ, "llama-3.1-8b-instant")] = ModelCapabilities(
+            provider=ModelProvider.GROQ,
+            model_name="llama-3.1-8b-instant",
+            max_tokens=8192,
+            supports_streaming=True,
+            supports_functions=False,
+            supports_vision=False,
+            reasoning_capability=0.75,
+            knowledge_breadth=0.78,
+            code_capability=0.75,
+            creative_capability=0.73,
+            input_cost=0.00005,  # $0.05 per 1M tokens (VERY CHEAP!)
+            output_cost=0.0001,  # $0.10 per 1M tokens
+            typical_latency_ms=100,  # BLAZING FAST!
+            availability=0.998,
+            data_retention_days=30,
+            trains_on_data=False,
+            local_execution=False
+        )
+
+        self.model_capabilities[(ModelProvider.GROQ, "mixtral-8x7b-32768")] = ModelCapabilities(
+            provider=ModelProvider.GROQ,
+            model_name="mixtral-8x7b-32768",
+            max_tokens=32768,
+            supports_streaming=True,
+            supports_functions=False,
+            supports_vision=False,
+            reasoning_capability=0.82,
+            knowledge_breadth=0.83,
+            code_capability=0.80,
+            creative_capability=0.78,
+            input_cost=0.00024,  # $0.24 per 1M tokens
+            output_cost=0.00024,  # $0.24 per 1M tokens
+            typical_latency_ms=120,  # SUPER FAST!
+            availability=0.998,
+            data_retention_days=30,
             trains_on_data=False,
             local_execution=False
         )
@@ -760,6 +908,12 @@ class MultiModelOrchestrator:
             self.providers[provider] = AnthropicProvider()
         elif provider == ModelProvider.GOOGLE:
             self.providers[provider] = GoogleProvider()
+        elif provider == ModelProvider.COHERE:
+            self.providers[provider] = CohereProvider()
+        elif provider == ModelProvider.MISTRAL:
+            self.providers[provider] = MistralProvider()
+        elif provider == ModelProvider.GROQ:
+            self.providers[provider] = GroqProvider()
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
@@ -964,12 +1118,15 @@ class MultiModelOrchestrator:
             )
 
             # Try cloud providers in order of preference
-            # Gemini Flash first (fastest, cheapest at $0.075/$0.30 per 1M tokens)
+            # Cloud fallback chain: ordered by cost/speed, most affordable first
             cloud_providers = [
-                (ModelProvider.GOOGLE, "gemini-1.5-flash"),
-                (ModelProvider.ANTHROPIC, "claude-3-haiku-20240307"),
-                (ModelProvider.OPENAI, "gpt-3.5-turbo"),
-                (ModelProvider.GOOGLE, "gemini-1.5-pro"),  # Backup if Flash unavailable
+                (ModelProvider.GROQ, "llama-3.1-8b-instant"),  # Blazing fast, ultra cheap ($0.05/$0.10 per 1M)
+                (ModelProvider.GOOGLE, "gemini-1.5-flash"),  # Very cheap ($0.075/$0.30 per 1M)
+                (ModelProvider.COHERE, "command-r"),  # Good balance ($0.50/$1.50 per 1M)
+                (ModelProvider.ANTHROPIC, "claude-3-haiku-20240307"),  # Fast Claude ($0.25/$1.25 per 1M)
+                (ModelProvider.MISTRAL, "mistral-small-latest"),  # European option ($1.00/$3.00 per 1M)
+                (ModelProvider.OPENAI, "gpt-3.5-turbo"),  # Reliable fallback ($0.50/$1.50 per 1M)
+                (ModelProvider.GOOGLE, "gemini-1.5-pro"),  # High quality backup
             ]
 
             fallback_error = None

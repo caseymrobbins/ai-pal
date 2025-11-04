@@ -4,14 +4,17 @@ Quick setup guide for using cloud AI models with AI-PAL.
 
 ## Supported Providers
 
-AI-PAL now supports **4 cloud providers**:
+AI-PAL now supports **7 cloud providers**:
 
 | Provider | Models | Best For | Cost (per 1M tokens) |
 |----------|--------|----------|---------------------|
-| **Google Gemini** | gemini-1.5-flash, gemini-1.5-pro, gemini-pro | Fast, cheap, vision | $0.075/$0.30 (Flash) ⭐ |
-| **Anthropic (Claude)** | claude-3-opus, claude-3-haiku | Privacy, quality | $15/$75 (Opus), $0.25/$1.25 (Haiku) |
+| **Groq** ⚡ | llama-3.1-8b-instant, mixtral-8x7b | Ultra-fast inference | $0.05/$0.10 (8B) 🔥 |
+| **Google Gemini** | gemini-1.5-flash, gemini-1.5-pro | Fast, cheap, vision | $0.075/$0.30 (Flash) ⭐ |
+| **Anthropic (Claude)** | claude-3.5-sonnet, claude-3-opus, claude-3-haiku | Privacy, quality, coding | $3/$15 (Sonnet), $0.25/$1.25 (Haiku) |
 | **OpenAI** | gpt-4-turbo, gpt-3.5-turbo | General purpose | $10/$30 (GPT-4), $0.50/$1.50 (GPT-3.5) |
-| **Cohere** | command | Specialized tasks | Varies |
+| **Cohere** | command-r-plus, command-r | RAG, multilingual | $3/$15 (R+), $0.50/$1.50 (R) |
+| **Mistral AI** | mistral-large, mistral-small | European data, coding | $4/$12 (Large), $1/$3 (Small) |
+| **Local** | phi-2, tinyllama | Privacy, offline | $0 (FREE) |
 
 ## Quick Setup (For 8GB MacBook Air)
 
@@ -67,7 +70,32 @@ AI-PAL now supports **4 cloud providers**:
    ai-pal chat
    ```
 
-### Option 3: OpenAI (GPT-4/GPT-3.5)
+### Option 3: Groq (Blazing Fast - Free Tier!)
+
+**Why Groq:**
+- ✓ FREE tier with generous limits
+- ✓ ULTRA-FAST (100-150ms latency!)
+- ✓ Cheapest paid option ($0.05/$0.10 per 1M tokens)
+- ✓ Great for rapid prototyping
+
+**Setup:**
+
+1. **Get API key:**
+   - Go to: https://console.groq.com
+   - Create account (free!)
+   - Generate API key
+
+2. **Set environment variable:**
+   ```bash
+   export GROQ_API_KEY="gsk-your-key-here"
+   ```
+
+3. **Chat:**
+   ```bash
+   ai-pal chat
+   ```
+
+### Option 4: OpenAI (GPT-4/GPT-3.5)
 
 **Setup:**
 
@@ -76,12 +104,37 @@ export OPENAI_API_KEY="sk-your-key-here"
 ai-pal chat
 ```
 
+### Option 5: Cohere (RAG & Multilingual)
+
+**Setup:**
+
+```bash
+export COHERE_API_KEY="your-key-here"
+ai-pal chat
+```
+
+Get key at: https://dashboard.cohere.com/api-keys
+
+### Option 6: Mistral AI (European, Privacy-Focused)
+
+**Setup:**
+
+```bash
+export MISTRAL_API_KEY="your-key-here"
+ai-pal chat
+```
+
+Get key at: https://console.mistral.ai/
+
 ## Make It Permanent
 
 Add to your `~/.zshrc` or `~/.bashrc`:
 
 ```bash
-# Google Gemini (fastest, cheapest)
+# Groq (ultra-fast, free tier)
+export GROQ_API_KEY="gsk-your-key-here"
+
+# Google Gemini (fast, cheap)
 export GOOGLE_API_KEY="your-key-here"
 
 # Anthropic Claude (best for coding)
@@ -89,6 +142,12 @@ export ANTHROPIC_API_KEY="sk-ant-your-key-here"
 
 # OpenAI (optional)
 export OPENAI_API_KEY="sk-your-key-here"
+
+# Cohere (optional - RAG, multilingual)
+export COHERE_API_KEY="your-key-here"
+
+# Mistral AI (optional - European)
+export MISTRAL_API_KEY="your-key-here"
 ```
 
 Then reload:
@@ -106,19 +165,37 @@ source ~/.zshrc  # or ~/.bashrc
    - If works: ✓ Uses local
    - If fails (no RAM/model): ↓ Falls back
 
-2. **Tries Gemini Flash** - $0.075/$0.30 per 1M tokens ⭐
-   - If works: ✓ Uses Gemini
+2. **Tries Groq Llama 3.1 8B** ⚡ - $0.05/$0.10 per 1M tokens 🔥
+   - Ultra-fast (100ms), cheapest!
+   - If works: ✓ Uses Groq
    - If fails (no API key): ↓ Falls back
 
-3. **Tries Claude Haiku** - $0.25/$1.25 per 1M tokens
+3. **Tries Gemini Flash** - $0.075/$0.30 per 1M tokens ⭐
+   - Fast, vision support
+   - If works: ✓ Uses Gemini
+   - If fails: ↓ Falls back
+
+4. **Tries Cohere Command R** - $0.50/$1.50 per 1M tokens
+   - Good for RAG tasks
+   - If works: ✓ Uses Cohere
+   - If fails: ↓ Falls back
+
+5. **Tries Claude Haiku** - $0.25/$1.25 per 1M tokens
+   - Fast, high quality
    - If works: ✓ Uses Claude
    - If fails: ↓ Falls back
 
-4. **Tries GPT-3.5** - $0.50/$1.50 per 1M tokens
+6. **Tries Mistral Small** - $1/$3 per 1M tokens
+   - European data residency
+   - If works: ✓ Uses Mistral
+   - If fails: ↓ Falls back
+
+7. **Tries GPT-3.5** - $0.50/$1.50 per 1M tokens
+   - Reliable fallback
    - If works: ✓ Uses GPT
    - If fails: ↓ Falls back
 
-5. **Tries Gemini Pro** - Backup option
+8. **Tries Gemini Pro** - Backup option
    - Last resort before giving up
 
 ### Task-Based Selection
@@ -141,9 +218,12 @@ You get the best model for the job!
 | Scenario | Daily Tokens | Daily Cost | Monthly Cost |
 |----------|--------------|------------|--------------|
 | All local | 50K | $0.00 | $0.00 |
+| Groq only | 50K | ~$0.01 | ~$0.30 🔥 |
 | Gemini Flash only | 50K | ~$0.02 | ~$0.60 |
 | Claude Haiku only | 50K | ~$0.06 | ~$1.80 |
+| Cohere Command R | 50K | ~$0.10 | ~$3.00 |
 | GPT-3.5 only | 50K | ~$0.10 | ~$3.00 |
+| Mistral Small | 50K | ~$0.20 | ~$6.00 |
 | Mixed (local + fallback) | 50K | ~$0.01 | ~$0.30 |
 
 **For self-improvement (AI fixing bugs):**
@@ -208,11 +288,16 @@ export ANTHROPIC_API_KEY="your-key"
 
 **Based on your hardware (8GB MacBook Air M1):**
 
+### Best Setup (Free + Paid Mix):
+
 ```bash
-# Use Gemini as primary (you pay for it anyway!)
+# Primary: Groq (FREE tier, blazing fast!)
+export GROQ_API_KEY="gsk-your-groq-key"
+
+# Backup 1: Gemini (you pay for it anyway!)
 export GOOGLE_API_KEY="your-gemini-key"
 
-# Use Claude as backup (you know me!)
+# Backup 2: Claude (you know me!)
 export ANTHROPIC_API_KEY="your-claude-key"
 
 # Chat works immediately, no downloads needed
@@ -221,11 +306,24 @@ ai-pal chat
 
 **This gives you:**
 - ✓ Zero memory usage
-- ✓ Fast responses (~600ms)
-- ✓ Cheap ($0.02/day typical)
+- ✓ ULTRA-FAST responses (~100ms with Groq!)
+- ✓ Nearly free ($0.01/day typical with free tier)
 - ✓ Self-repair works
-- ✓ Automatic fallback
+- ✓ Triple fallback safety
 - ✓ Best quality for complex tasks
+
+### Budget-Conscious Setup:
+
+Just use Groq's free tier:
+```bash
+export GROQ_API_KEY="gsk-your-groq-key"
+ai-pal chat
+```
+
+**Free tier limits:**
+- 14,400 requests/day
+- 7,000 requests/minute
+- More than enough for personal use!
 
 ## Cost Optimization Tips
 
@@ -247,6 +345,10 @@ ai-pal chat
 
 ## Free Tier Limits
 
+**Groq:** ⭐
+- FREE tier: 14,400 requests/day, 7,000 req/min
+- Best free tier available!
+
 **Google Gemini:**
 - Free tier: 60 requests/minute
 - Plenty for personal use!
@@ -259,21 +361,52 @@ ai-pal chat
 - $5 free credit on signup
 - ~3M tokens (GPT-3.5)
 
+**Cohere:**
+- Free trial available
+- Limited production use
+
+**Mistral AI:**
+- Free trial credits
+- Pay-as-you-go thereafter
+
 ## Privacy Comparison
 
-| Provider | Trains on Data | Retention | Best For |
-|----------|----------------|-----------|----------|
-| Local | Never | 0 days | Maximum privacy |
-| Anthropic | No (paid tier) | 0 days | High privacy |
-| Google | No (paid tier) | 18 months | Balanced |
-| OpenAI | No (API) | 30 days | General use |
+| Provider | Trains on Data | Retention | Data Location | Best For |
+|----------|----------------|-----------|---------------|----------|
+| Local | Never | 0 days | Your Mac | Maximum privacy |
+| Anthropic | No (paid tier) | 0 days | US | High privacy, coding |
+| Mistral AI | No | 0 days | EU | European data residency |
+| Google | No (paid tier) | 18 months | US | Balanced, vision |
+| OpenAI | No (API) | 30 days | US | General use |
+| Groq | No | 30 days | US | Speed, free tier |
+| Cohere | No (paid tier) | 30 days | Multi-region | RAG, multilingual |
 
 ## Next Steps
 
-1. **Set up Gemini** (since you pay for it!)
-2. **Set up Claude** (since you like me!)
-3. **Test it:** `ai-pal chat`
-4. **Optional:** Download TinyLlama for offline use later
+### Quick Start (5 minutes):
+
+1. **Set up Groq** (FREE tier, fastest!)
+   ```bash
+   # Visit: https://console.groq.com
+   # Get API key, then:
+   export GROQ_API_KEY="gsk-your-key"
+   ```
+
+2. **Set up Gemini** (since you pay for it!)
+   ```bash
+   export GOOGLE_API_KEY="your-key"
+   ```
+
+3. **Test it:**
+   ```bash
+   pip install -e .  # Install new dependencies
+   ai-pal chat
+   ```
+
+4. **Optional:** Add Claude as backup (since you like me!)
+   ```bash
+   export ANTHROPIC_API_KEY="sk-ant-your-key"
+   ```
 
 **You're ready to go!** 🚀
 
