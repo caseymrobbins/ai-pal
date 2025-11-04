@@ -28,6 +28,7 @@ from loguru import logger
 from ai_pal.models.local import LocalLLMProvider
 from ai_pal.models.anthropic_provider import AnthropicProvider
 from ai_pal.models.openai_provider import OpenAIProvider
+from ai_pal.models.google_provider import GoogleProvider
 from ai_pal.models.base import LLMRequest, LLMResponse
 
 
@@ -36,6 +37,7 @@ class ModelProvider(Enum):
     LOCAL = "local"  # Local SLM (Phi-2, Llama, etc.)
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
+    GOOGLE = "google"  # Google Gemini
     COHERE = "cohere"
 
 
@@ -315,6 +317,67 @@ class MultiModelOrchestrator:
             typical_latency_ms=800,
             availability=0.998,
             data_retention_days=0,
+            trains_on_data=False,
+            local_execution=False
+        )
+
+        # Google Gemini models
+        self.model_capabilities[(ModelProvider.GOOGLE, "gemini-1.5-pro")] = ModelCapabilities(
+            provider=ModelProvider.GOOGLE,
+            model_name="gemini-1.5-pro",
+            max_tokens=8192,
+            supports_streaming=True,
+            supports_functions=True,
+            supports_vision=True,
+            reasoning_capability=0.90,
+            knowledge_breadth=0.92,
+            code_capability=0.88,
+            creative_capability=0.87,
+            input_cost=0.00125,  # $1.25 per 1M tokens
+            output_cost=0.005,  # $5.00 per 1M tokens
+            typical_latency_ms=1500,
+            availability=0.995,
+            data_retention_days=18,  # Google's retention policy
+            trains_on_data=False,  # With paid API
+            local_execution=False
+        )
+
+        self.model_capabilities[(ModelProvider.GOOGLE, "gemini-1.5-flash")] = ModelCapabilities(
+            provider=ModelProvider.GOOGLE,
+            model_name="gemini-1.5-flash",
+            max_tokens=8192,
+            supports_streaming=True,
+            supports_functions=True,
+            supports_vision=True,
+            reasoning_capability=0.80,
+            knowledge_breadth=0.85,
+            code_capability=0.78,
+            creative_capability=0.75,
+            input_cost=0.000075,  # $0.075 per 1M tokens (VERY CHEAP!)
+            output_cost=0.0003,  # $0.30 per 1M tokens
+            typical_latency_ms=600,
+            availability=0.998,
+            data_retention_days=18,
+            trains_on_data=False,
+            local_execution=False
+        )
+
+        self.model_capabilities[(ModelProvider.GOOGLE, "gemini-pro")] = ModelCapabilities(
+            provider=ModelProvider.GOOGLE,
+            model_name="gemini-pro",
+            max_tokens=8192,
+            supports_streaming=True,
+            supports_functions=False,
+            supports_vision=False,
+            reasoning_capability=0.75,
+            knowledge_breadth=0.80,
+            code_capability=0.72,
+            creative_capability=0.70,
+            input_cost=0.0005,  # $0.50 per 1M tokens
+            output_cost=0.0015,  # $1.50 per 1M tokens
+            typical_latency_ms=1000,
+            availability=0.998,
+            data_retention_days=18,
             trains_on_data=False,
             local_execution=False
         )
@@ -695,6 +758,8 @@ class MultiModelOrchestrator:
             self.providers[provider] = OpenAIProvider()
         elif provider == ModelProvider.ANTHROPIC:
             self.providers[provider] = AnthropicProvider()
+        elif provider == ModelProvider.GOOGLE:
+            self.providers[provider] = GoogleProvider()
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
@@ -899,10 +964,12 @@ class MultiModelOrchestrator:
             )
 
             # Try cloud providers in order of preference
+            # Gemini Flash first (fastest, cheapest at $0.075/$0.30 per 1M tokens)
             cloud_providers = [
-                (ModelProvider.OPENAI, "gpt-3.5-turbo"),
+                (ModelProvider.GOOGLE, "gemini-1.5-flash"),
                 (ModelProvider.ANTHROPIC, "claude-3-haiku-20240307"),
-                (ModelProvider.COHERE, "command"),
+                (ModelProvider.OPENAI, "gpt-3.5-turbo"),
+                (ModelProvider.GOOGLE, "gemini-1.5-pro"),  # Backup if Flash unavailable
             ]
 
             fallback_error = None
