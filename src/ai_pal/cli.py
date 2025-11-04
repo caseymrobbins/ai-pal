@@ -567,6 +567,9 @@ def teach_topics():
 def chat(
     local_only: bool = typer.Option(
         False, "--local-only", "-l", help="Use only local models"
+    ),
+    model: str = typer.Option(
+        "phi-2", "--model", "-m", help="Preferred model (phi-2, phi-3, tinyllama, llama3.2)"
     )
 ):
     """Start an interactive chat session with AI-PAL"""
@@ -584,17 +587,17 @@ def chat(
         border_style="cyan"
     ))
 
-    asyncio.run(_chat_session(system, user_id, local_only))
+    asyncio.run(_chat_session(system, user_id, local_only, model))
 
 
-async def _chat_session(system: IntegratedACSystem, user_id: str, local_only: bool):
+async def _chat_session(system: IntegratedACSystem, user_id: str, local_only: bool, preferred_model: str = "phi-2"):
     """Run interactive chat session with full AC-AI integration"""
 
     if not system.orchestrator:
         console.print("[red]✗[/red] Model orchestrator not available")
         raise typer.Exit(1)
 
-    console.print("\n[dim green]Ready! Start chatting...[/dim green]\n")
+    console.print(f"\n[dim green]Ready! Using preferred model: {preferred_model}[/dim green]\n")
 
     # Chat loop
     while True:
