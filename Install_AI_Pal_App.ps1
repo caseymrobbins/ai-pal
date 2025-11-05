@@ -134,7 +134,7 @@ HTML_CONTROLS = '''
     <div id="status">Status: Idle</div>
     <script>
         function updateStatus(message) {
-            document.getElementById('status').innerText = 'Status: 'D + message;
+            document.getElementById('status').innerText = 'Status: ' + message;
         }
         function setControls(disabled) {
             document.getElementById('btnStart').disabled = disabled;
