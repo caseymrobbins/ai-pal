@@ -10,17 +10,33 @@ Write-Host "WARNING: Installing Docker Desktop will require a system REBOOT." -F
 Read-Host -Prompt "Press Enter to continue..."
 
 # --- Step 1: Install Prerequisites ---
-Write-Host "[Step 1/6] Installing Git..."
-winget install --id Git.Git -e --accept-source-agreements --accept-package-agreements
-if ($LASTEXITCODE -ne 0) { Write-Host "Error: Winget failed to install Git." -ForegroundColor Red; exit 1 }
+Write-Host "[Step 1/6] Checking Git installation..."
+if (Get-Command git -ErrorAction SilentlyContinue) {
+    Write-Host "Git is already installed. Skipping..." -ForegroundColor Green
+} else {
+    Write-Host "Installing Git..."
+    winget install --id Git.Git -e --accept-source-agreements --accept-package-agreements
+    if ($LASTEXITCODE -ne 0) { Write-Host "Error: Winget failed to install Git." -ForegroundColor Red; exit 1 }
+}
 
-Write-Host "[Step 2/6] Installing Docker Desktop..."
-winget install --id Docker.DockerDesktop -e --accept-source-agreements --accept-package-agreements
-if ($LASTEXITCODE -ne 0) { Write-Host "Error: Winget failed to install Docker." -ForegroundColor Red; exit 1 }
+Write-Host "[Step 2/6] Checking Docker Desktop installation..."
+if (Get-Command docker -ErrorAction SilentlyContinue) {
+    Write-Host "Docker Desktop is already installed. Skipping..." -ForegroundColor Green
+} else {
+    Write-Host "Installing Docker Desktop..."
+    winget install --id Docker.DockerDesktop -e --accept-source-agreements --accept-package-agreements
+    if ($LASTEXITCODE -ne 0) { Write-Host "Error: Winget failed to install Docker." -ForegroundColor Red; exit 1 }
+}
 
-Write-Host "[Step 3/6] Installing Python 3.9..."
-winget install --id Python.Python.3.9 -e --accept-source-agreements --accept-package-agreements
-if ($LASTEXITCODE -ne 0) { Write-Host "Error: Winget failed to install Python." -ForegroundColor Red; exit 1 }
+Write-Host "[Step 3/6] Checking Python 3.9 installation..."
+if (Get-Command python -ErrorAction SilentlyContinue) {
+    $pythonVersion = python --version 2>&1
+    Write-Host "Python is already installed ($pythonVersion). Skipping..." -ForegroundColor Green
+} else {
+    Write-Host "Installing Python 3.9..."
+    winget install --id Python.Python.3.9 -e --accept-source-agreements --accept-package-agreements
+    if ($LASTEXITCODE -ne 0) { Write-Host "Error: Winget failed to install Python." -ForegroundColor Red; exit 1 }
+}
 
 Write-Host "--- Prerequisites installed. ---"
 Write-Host "Pausing for 10 seconds to allow PATH to refresh..."
