@@ -21,7 +21,10 @@ from ai_pal.core.hardware import get_hardware_info
 from ai_pal.models.router import LLMRouter, TaskComplexity
 from ai_pal.models.base import LLMRequest, LLMResponse
 from ai_pal.modules.base import BaseModule, ModuleRequest, ModuleResponse
-from ai_pal.modules.ethics import EthicsModule
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ai_pal.modules.ethics import EthicsModule
 
 
 @dataclass
@@ -57,7 +60,8 @@ class Orchestrator:
     This is the main brain that coordinates all modules and LLMs.
     """
 
-    def __init__(self):
+    def __init__(self, ethics_module: 'EthicsModule'):
+        self.ethics_module = ethics_module
         """Initialize orchestrator."""
         logger.info("Initializing AI Pal Orchestrator...")
 
