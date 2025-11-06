@@ -5,10 +5,11 @@ import { ARIMetrics } from './components/ARIMetrics';
 import { FFEGoals } from './components/FFEGoals';
 import { SystemHealth } from './components/SystemHealth';
 import { AuditLogs } from './components/AuditLogs';
+import { BackgroundJobs } from './components/BackgroundJobs';
 import { useDashboardStore } from './store/store';
 import { initializeApiClient, getApiClient } from './api/client';
 
-type ViewType = 'overview' | 'ari' | 'goals' | 'health' | 'personality' | 'teaching' | 'audit';
+type ViewType = 'overview' | 'ari' | 'goals' | 'health' | 'personality' | 'teaching' | 'audit' | 'jobs';
 
 function App() {
   const [currentView, setCurrentView] = useState<ViewType>('overview');
@@ -144,6 +145,7 @@ function App() {
             { id: 'ari', label: '📈 Agency Metrics' },
             { id: 'goals', label: '🎯 FFE Goals' },
             { id: 'health', label: '🏥 System Health' },
+            { id: 'jobs', label: '⚙️ Background Jobs' },
             { id: 'personality', label: '💡 Personality' },
             { id: 'teaching', label: '📚 Teaching' },
             { id: 'audit', label: '📋 Audit Logs' },
@@ -185,6 +187,8 @@ function App() {
         {currentView === 'goals' && userId && <FFEGoals userId={userId} />}
 
         {currentView === 'health' && userId && <SystemHealth userId={userId} />}
+
+        {currentView === 'jobs' && userId && <BackgroundJobs userId={userId} />}
 
         {currentView === 'personality' && (
           <div className="bg-white rounded-lg shadow p-6">

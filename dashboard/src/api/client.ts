@@ -254,6 +254,79 @@ class ApiClient {
     return response.data;
   }
 
+  // ============ Background Tasks Endpoints ============
+
+  async listTasks(status?: string, userId?: string, limit: number = 20) {
+    const response = await this.client.get('/tasks/list', {
+      params: { status, user_id: userId, limit },
+    });
+    return response.data;
+  }
+
+  async getTaskStatus(taskId: string) {
+    const response = await this.client.get(`/tasks/status/${taskId}`);
+    return response.data;
+  }
+
+  async getPendingTasks(limit: number = 10) {
+    const response = await this.client.get('/tasks/pending', {
+      params: { limit },
+    });
+    return response.data;
+  }
+
+  async getFailedTasks(limit: number = 10) {
+    const response = await this.client.get('/tasks/failed', {
+      params: { limit },
+    });
+    return response.data;
+  }
+
+  async getTasksHealth() {
+    const response = await this.client.get('/tasks/health');
+    return response.data;
+  }
+
+  async submitARIAggregation(userId?: string, timeWindowHours: number = 24) {
+    const response = await this.client.post('/tasks/ari/aggregate-snapshots', {
+      task_type: 'ari_snapshot',
+      user_id: userId,
+      priority: 5,
+      parameters: { time_window_hours: timeWindowHours },
+    });
+    return response.data;
+  }
+
+  async submitFFEPlanning(goalId: string, userId: string, goalDescription: string, complexityLevel: string = 'medium') {
+    const response = await this.client.post('/tasks/ffe/plan-goal', {
+      task_type: 'ffe_planning',
+      user_id: userId,
+      priority: 7,
+      parameters: { goal_id: goalId, goal_description: goalDescription, complexity_level: complexityLevel },
+    });
+    return response.data;
+  }
+
+  async submitEDMAnalysis(userId?: string, timeWindowDays: number = 7, minSeverity: string = 'low') {
+    const response = await this.client.post('/tasks/edm/batch-analysis', {
+      task_type: 'edm_analysis',
+      user_id: userId,
+      priority: 5,
+      parameters: { time_window_days: timeWindowDays, min_severity: minSeverity },
+    });
+    return response.data;
+  }
+
+  async cancelTask(taskId: string) {
+    const response = await this.client.delete(`/tasks/${taskId}`);
+    return response.data;
+  }
+
+  async retryTask(taskId: string) {
+    const response = await this.client.post(`/tasks/${taskId}/retry`);
+    return response.data;
+  }
+
   // ============ Chat Endpoint ============
 
   async chat(message: string, context?: Record<string, any>) {
