@@ -10,6 +10,7 @@ Endpoints:
 - /api/ffe - Fractal Flow Engine
 - /api/social - Social features
 - /api/personality - Personality discovery
+- /api/tasks - Background task management
 - /metrics - Prometheus metrics
 
 Authentication: Bearer token (JWT)
@@ -27,6 +28,9 @@ import os
 # Import AI-PAL components
 from ai_pal.core.integrated_system import IntegratedACSystem, SystemConfig
 from ai_pal.monitoring import get_health_checker, get_metrics, get_logger
+from ai_pal.storage.database import DatabaseManager, BackgroundTaskRepository
+from ai_pal.api import tasks as tasks_router
+from ai_pal.tasks.celery_app import app as celery_app
 from pathlib import Path
 
 # Initialize
@@ -51,6 +55,9 @@ app.add_middleware(
 
 # Initialize AC system (singleton)
 _ac_system: Optional[IntegratedACSystem] = None
+
+# Initialize database manager for background tasks (singleton)
+_db_manager: Optional[DatabaseManager] = None
 
 
 def get_ac_system() -> IntegratedACSystem:
@@ -81,6 +88,28 @@ def get_ac_system() -> IntegratedACSystem:
         )
         _ac_system = IntegratedACSystem(config=config)
     return _ac_system
+
+
+def get_db_manager() -> DatabaseManager:
+    """Get or create database manager instance for background tasks"""
+    global _db_manager
+    if _db_manager is None:
+        # Get database URL from environment or use default
+        database_url = os.getenv(
+            "DATABASE_URL",
+            "sqlite+aiosqlite:///./ai_pal.db"
+        )
+
+        _db_manager = DatabaseManager(
+            database_url=database_url,
+            echo=os.getenv("DB_ECHO", "false").lower() == "true",
+            pool_size=int(os.getenv("DB_POOL_SIZE", "5")),
+            max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "10"))
+        )
+
+        logger.info(f"Database manager initialized with {database_url}")
+
+    return _db_manager
 
 
 # ===== REQUEST/RESPONSE MODELS =====
@@ -182,6 +211,47 @@ async def metrics():
     """
     metrics_collector = get_metrics()
     return metrics_collector.export_prometheus()
+
+
+# ===== APP STARTUP/SHUTDOWN =====
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize background systems on startup"""
+    try:
+        # Initialize database manager and create tables
+        db_manager = get_db_manager()
+        await db_manager.create_tables()
+        logger.info("Database tables created/verified")
+
+        # Setup tasks router with database manager
+        tasks_router.set_db_manager(db_manager)
+
+        # Setup Celery task base class with database
+        from ai_pal.tasks.base_task import AIpalTask
+        AIpalTask.setup_db(db_manager)
+
+        logger.info("Background task system initialized")
+
+    except Exception as exc:
+        logger.error(f"Error during startup: {exc}", exc_info=True)
+        raise
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Clean up resources on shutdown"""
+    try:
+        if _db_manager:
+            await _db_manager.close()
+            logger.info("Database connections closed")
+
+    except Exception as exc:
+        logger.error(f"Error during shutdown: {exc}", exc_info=True)
+
+
+# Register background task routes
+app.include_router(tasks_router.router)
 
 
 # ===== CORE AC SYSTEM =====
