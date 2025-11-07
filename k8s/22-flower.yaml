@@ -1,0 +1,108 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: flower
+  namespace: ai-pal
+  labels:
+    app: flower
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5555
+      targetPort: 5555
+      name: http
+  selector:
+    app: flower
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flower
+  namespace: ai-pal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flower
+  template:
+    metadata:
+      labels:
+        app: flower
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5555"
+    spec:
+      serviceAccountName: api
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: flower
+        image: mher/flower:2.0
+        imagePullPolicy: IfNotPresent
+        command:
+          - celery
+          - -A
+          - ai_pal.tasks.celery_app
+          - flower
+          - --port=5555
+          - --basic_auth=$(FLOWER_USER):$(FLOWER_PASSWORD)
+        ports:
+        - containerPort: 5555
+          name: http
+        env:
+        - name: CELERY_BROKER_URL
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379/1"
+        - name: CELERY_RESULT_BACKEND
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379/2"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-pal-secrets
+              key: REDIS_PASSWORD
+        - name: FLOWER_USER
+          valueFrom:
+            secretKeyRef:
+              name: flower-secrets
+              key: FLOWER_USER
+        - name: FLOWER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: flower-secrets
+              key: FLOWER_PASSWORD
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 5555
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 5555
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}

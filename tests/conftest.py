@@ -443,3 +443,156 @@ def timer():
             return 0
 
     return Timer()
+
+
+# ============================================================================
+# Background Tasks Test Fixtures
+# ============================================================================
+
+@pytest.fixture
+def mock_db_manager():
+    """Mock database manager for background tasks"""
+    from unittest.mock import AsyncMock
+
+    db_manager = AsyncMock()
+    db_manager.create_tables = AsyncMock(return_value=None)
+    db_manager.close = AsyncMock(return_value=None)
+    db_manager.get_session = AsyncMock()
+    return db_manager
+
+
+@pytest.fixture
+def mock_ari_repository():
+    """Mock ARI repository"""
+    from unittest.mock import AsyncMock
+
+    repo = AsyncMock()
+    repo.get_snapshots_by_user = AsyncMock(return_value=[
+        {
+            "snapshot_id": "snap-1",
+            "user_id": "user1",
+            "timestamp": datetime.now(),
+            "decision_quality": 0.85,
+            "skill_development": 0.75,
+            "ai_reliance": 0.4,
+            "bottleneck_resolution": 0.9,
+            "user_confidence": 0.8,
+            "engagement": 0.85,
+            "autonomy_perception": 0.8,
+            "autonomy_retention": 0.81,
+            "delta_agency": 0.05,
+        },
+        {
+            "snapshot_id": "snap-2",
+            "user_id": "user1",
+            "timestamp": datetime.now(),
+            "decision_quality": 0.82,
+            "skill_development": 0.72,
+            "ai_reliance": 0.45,
+            "bottleneck_resolution": 0.88,
+            "user_confidence": 0.78,
+            "engagement": 0.82,
+            "autonomy_perception": 0.77,
+            "autonomy_retention": 0.79,
+            "delta_agency": -0.02,
+        },
+    ])
+    repo.get_latest_snapshot = AsyncMock(return_value={
+        "snapshot_id": "snap-2",
+        "user_id": "user1",
+        "timestamp": datetime.now(),
+        "autonomy_retention": 0.79,
+    })
+    return repo
+
+
+@pytest.fixture
+def mock_goal_repository():
+    """Mock goal repository"""
+    from unittest.mock import AsyncMock
+
+    repo = AsyncMock()
+    repo.get_active_goals = AsyncMock(return_value=[
+        {
+            "goal_id": "goal-1",
+            "user_id": "user1",
+            "description": "Complete project X",
+            "importance": 9,
+            "complexity_level": "complex",
+            "estimated_value": 50.0,
+            "status": "active",
+            "created_at": datetime.now(),
+            "completed_at": None,
+            "deadline": None,
+        }
+    ])
+    repo.save_goal = AsyncMock(return_value="goal-1")
+    repo.update_goal_status = AsyncMock(return_value=None)
+    return repo
+
+
+@pytest.fixture
+def mock_background_task_repository():
+    """Mock background task repository"""
+    from unittest.mock import AsyncMock
+
+    repo = AsyncMock()
+    repo.create_task = AsyncMock(return_value="task-1")
+    repo.get_task = AsyncMock(return_value={
+        "task_id": "task-1",
+        "task_name": "test_task",
+        "task_type": "test",
+        "status": "pending",
+        "user_id": "user1",
+        "created_at": datetime.now(),
+        "started_at": None,
+        "completed_at": None,
+        "result": None,
+        "error_message": None,
+        "attempts": 0,
+        "duration_seconds": None,
+    })
+    repo.update_task_status = AsyncMock(return_value=None)
+    repo.record_task_result = AsyncMock(return_value=None)
+    repo.get_tasks_by_status = AsyncMock(return_value=[])
+    repo.get_pending_tasks = AsyncMock(return_value=[])
+    repo.get_failed_tasks = AsyncMock(return_value=[])
+    return repo
+
+
+@pytest.fixture
+def sample_task_result():
+    """Sample task result data"""
+    return {
+        "status": "completed",
+        "result_count": 5,
+        "metrics": {
+            "average": 0.82,
+            "min": 0.75,
+            "max": 0.90,
+        },
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+@pytest.fixture
+def sample_ari_aggregation_result():
+    """Sample ARI aggregation result"""
+    return {
+        "user_id": "user1",
+        "time_window_hours": 24,
+        "aggregated_count": 10,
+        "snapshot_period": {
+            "start": datetime.now().isoformat(),
+            "end": datetime.now().isoformat(),
+        },
+        "metrics_summary": {
+            "autonomy_retention": {
+                "count": 10,
+                "average": 0.79,
+                "min": 0.75,
+                "max": 0.85,
+                "latest": 0.79,
+            }
+        },
+    }

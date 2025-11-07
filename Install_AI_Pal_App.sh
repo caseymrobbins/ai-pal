@@ -24,17 +24,33 @@ else
 fi
 
 # --- Step 2: Install Prerequisites ---
-echo "[Step 2/7] Installing Git..."
-brew install git
-if [ $? -ne 0 ]; then echo -e "\033[0;31mError: Failed to install Git.\033[0m"; exit 1; fi
+echo "[Step 2/7] Checking Git installation..."
+if command -v git &> /dev/null; then
+    echo -e "\033[0;32mGit is already installed. Skipping...\033[0m"
+else
+    echo "Installing Git..."
+    brew install git
+    if [ $? -ne 0 ]; then echo -e "\033[0;31mError: Failed to install Git.\033[0m"; exit 1; fi
+fi
 
-echo "[Step 3/7] Installing Docker Desktop..."
-brew install --cask docker
-if [ $? -ne 0 ]; then echo -e "\033[0;31mError: Failed to install Docker Desktop.\033[0m"; exit 1; fi
+echo "[Step 3/7] Checking Docker Desktop installation..."
+if command -v docker &> /dev/null; then
+    echo -e "\033[0;32mDocker Desktop is already installed. Skipping...\033[0m"
+else
+    echo "Installing Docker Desktop..."
+    brew install --cask docker
+    if [ $? -ne 0 ]; then echo -e "\033[0;31mError: Failed to install Docker Desktop.\033[0m"; exit 1; fi
+fi
 
-echo "[Step 4/7] Installing Python 3.9..."
-brew install python@3.9
-if [ $? -ne 0 ]; then echo -e "\033[0;31mError: Failed to install Python.\033[0m"; exit 1; fi
+echo "[Step 4/7] Checking Python 3.9 installation..."
+if command -v python3.9 &> /dev/null; then
+    pythonVersion=$(python3.9 --version 2>&1)
+    echo -e "\033[0;32mPython 3.9 is already installed ($pythonVersion). Skipping...\033[0m"
+else
+    echo "Installing Python 3.9..."
+    brew install python@3.9
+    if [ $? -ne 0 ]; then echo -e "\033[0;31mError: Failed to install Python.\033[0m"; exit 1; fi
+fi
 
 # Ensure Homebrew's Python is first in PATH
 export PATH="/opt/homebrew/opt/python@3.9/bin:$PATH"

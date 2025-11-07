@@ -273,6 +273,49 @@ class PatchRequestDB(Base):
     )
 
 
+class BackgroundTaskDB(Base):
+    """Background task execution tracking"""
+    __tablename__ = "background_tasks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(String(255), unique=True, nullable=False, index=True)
+    task_name = Column(String(255), nullable=False, index=True)
+    user_id = Column(String(255), nullable=True, index=True)
+
+    # Task details
+    task_type = Column(String(50), nullable=False)  # ari_snapshot, ffe_planning, edm_analysis, etc.
+    status = Column(String(50), default="pending", index=True, nullable=False)  # pending, running, completed, failed
+    priority = Column(Integer, default=5, nullable=False)  # 1-10, higher is more important
+
+    # Execution info
+    created_at = Column(DateTime, nullable=False, index=True, default=datetime.now)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+
+    # Result tracking
+    result = Column(Text, nullable=True)  # JSON serialized result
+    error_message = Column(Text, nullable=True)
+    error_traceback = Column(Text, nullable=True)
+
+    # Retry info
+    attempts = Column(Integer, default=0, nullable=False)
+    max_retries = Column(Integer, default=3, nullable=False)
+
+    # Task arguments (for replay/retry)
+    args = Column(Text, nullable=True)  # JSON serialized args
+    kwargs = Column(Text, nullable=True)  # JSON serialized kwargs
+
+    # Performance metrics
+    duration_seconds = Column(Float, nullable=True)
+    celery_task_id = Column(String(255), nullable=True, index=True)
+
+    __table_args__ = (
+        Index('idx_task_status_created', 'task_name', 'status', 'created_at'),
+        Index('idx_user_status', 'user_id', 'status'),
+        Index('idx_celery_id', 'celery_task_id'),
+    )
+
+
 # ============================================================================
 # Database Manager
 # ============================================================================
@@ -685,4 +728,212 @@ class PatchRequestRepository:
             "application_error": request.application_error,
             "feedback_ids": json.loads(request.feedback_ids) if request.feedback_ids else [],
             "metrics": json.loads(request.metrics) if request.metrics else {}
+        }
+
+
+class BackgroundTaskRepository:
+    """Repository for background task operations"""
+
+    def __init__(self, db_manager: DatabaseManager):
+        self.db = db_manager
+
+    async def create_task(
+        self,
+        task_id: str,
+        task_name: str,
+        task_type: str,
+        priority: int = 5,
+        user_id: Optional[str] = None,
+        args: Optional[Dict[str, Any]] = None,
+        kwargs: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """Create a new background task record"""
+        from sqlalchemy import insert
+
+        async with self.db.get_session() as session:
+            task_data = {
+                "task_id": task_id,
+                "task_name": task_name,
+                "task_type": task_type,
+                "priority": priority,
+                "user_id": user_id,
+                "status": "pending",
+                "args": json.dumps(args or {}),
+                "kwargs": json.dumps(kwargs or {}),
+                "created_at": datetime.now()
+            }
+
+            stmt = insert(BackgroundTaskDB).values(**task_data)
+            await session.execute(stmt)
+            await session.commit()
+
+            return task_id
+
+    async def update_task_status(
+        self,
+        task_id: str,
+        status: str,
+        started_at: Optional[datetime] = None,
+        completed_at: Optional[datetime] = None
+    ):
+        """Update task status"""
+        from sqlalchemy import update
+
+        async with self.db.get_session() as session:
+            updates = {"status": status}
+
+            if started_at:
+                updates["started_at"] = started_at
+            if completed_at:
+                updates["completed_at"] = completed_at
+
+            stmt = update(BackgroundTaskDB).where(
+                BackgroundTaskDB.task_id == task_id
+            ).values(**updates)
+
+            await session.execute(stmt)
+            await session.commit()
+
+    async def record_task_result(
+        self,
+        task_id: str,
+        result: Optional[Dict[str, Any]] = None,
+        error_message: Optional[str] = None,
+        error_traceback: Optional[str] = None,
+        duration_seconds: Optional[float] = None,
+        attempts: Optional[int] = None
+    ):
+        """Record task result/error"""
+        from sqlalchemy import update
+
+        async with self.db.get_session() as session:
+            updates = {}
+
+            if result is not None:
+                updates["result"] = json.dumps(result)
+
+            if error_message:
+                updates["error_message"] = error_message
+
+            if error_traceback:
+                updates["error_traceback"] = error_traceback
+
+            if duration_seconds is not None:
+                updates["duration_seconds"] = duration_seconds
+
+            if attempts is not None:
+                updates["attempts"] = attempts
+
+            if not updates:
+                return
+
+            stmt = update(BackgroundTaskDB).where(
+                BackgroundTaskDB.task_id == task_id
+            ).values(**updates)
+
+            await session.execute(stmt)
+            await session.commit()
+
+    async def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """Get task by ID"""
+        from sqlalchemy import select
+
+        async with self.db.get_session() as session:
+            query = select(BackgroundTaskDB).where(
+                BackgroundTaskDB.task_id == task_id
+            )
+            result = await session.execute(query)
+            task = result.scalar_one_or_none()
+
+            return self._task_to_dict(task) if task else None
+
+    async def get_tasks_by_status(
+        self,
+        status: str,
+        limit: Optional[int] = None,
+        offset: int = 0
+    ) -> List[Dict[str, Any]]:
+        """Get tasks by status"""
+        from sqlalchemy import select
+
+        async with self.db.get_session() as session:
+            query = select(BackgroundTaskDB).where(
+                BackgroundTaskDB.status == status
+            ).order_by(BackgroundTaskDB.created_at.desc())
+
+            if limit:
+                query = query.limit(limit).offset(offset)
+
+            result = await session.execute(query)
+            tasks = result.scalars().all()
+
+            return [self._task_to_dict(t) for t in tasks]
+
+    async def get_user_tasks(
+        self,
+        user_id: str,
+        limit: Optional[int] = None,
+        offset: int = 0
+    ) -> List[Dict[str, Any]]:
+        """Get tasks for a specific user"""
+        from sqlalchemy import select
+
+        async with self.db.get_session() as session:
+            query = select(BackgroundTaskDB).where(
+                BackgroundTaskDB.user_id == user_id
+            ).order_by(BackgroundTaskDB.created_at.desc())
+
+            if limit:
+                query = query.limit(limit).offset(offset)
+
+            result = await session.execute(query)
+            tasks = result.scalars().all()
+
+            return [self._task_to_dict(t) for t in tasks]
+
+    async def get_pending_tasks(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get pending tasks"""
+        return await self.get_tasks_by_status("pending", limit=limit)
+
+    async def get_failed_tasks(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get failed tasks"""
+        return await self.get_tasks_by_status("failed", limit=limit)
+
+    async def delete_old_tasks(self, days: int = 7):
+        """Delete tasks older than specified days"""
+        from sqlalchemy import delete
+        from datetime import timedelta
+
+        async with self.db.get_session() as session:
+            cutoff_date = datetime.now() - timedelta(days=days)
+
+            stmt = delete(BackgroundTaskDB).where(
+                BackgroundTaskDB.created_at < cutoff_date,
+                BackgroundTaskDB.status.in_(["completed", "failed"])
+            )
+
+            await session.execute(stmt)
+            await session.commit()
+
+    def _task_to_dict(self, task: BackgroundTaskDB) -> Dict[str, Any]:
+        """Convert task model to dict"""
+        return {
+            "task_id": task.task_id,
+            "task_name": task.task_name,
+            "task_type": task.task_type,
+            "user_id": task.user_id,
+            "status": task.status,
+            "priority": task.priority,
+            "created_at": task.created_at,
+            "started_at": task.started_at,
+            "completed_at": task.completed_at,
+            "result": json.loads(task.result) if task.result else None,
+            "error_message": task.error_message,
+            "error_traceback": task.error_traceback,
+            "attempts": task.attempts,
+            "max_retries": task.max_retries,
+            "duration_seconds": task.duration_seconds,
+            "celery_task_id": task.celery_task_id,
+            "args": json.loads(task.args) if task.args else {},
+            "kwargs": json.loads(task.kwargs) if task.kwargs else {}
         }
