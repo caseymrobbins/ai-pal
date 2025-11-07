@@ -1,0 +1,73 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv
+.env
+.env.local
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Testing
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+.hypothesis/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation
+docs/_build/
+
+# Node (dashboard)
+dashboard/node_modules/
+dashboard/.npm
+dashboard/.eslintcache
+
+# Temporary files
+*.tmp
+*.log
+logs/
+
+# Kubernetes
+k8s/
+kubeconfig
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.docker/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.circleci/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+.env.*.local
+*.pid
+*.seed
