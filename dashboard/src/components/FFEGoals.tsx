@@ -13,7 +13,10 @@ export const FFEGoals: React.FC<{ userId: string }> = ({ userId }) => {
       try {
         const client = getApiClient();
         const data = await client.getGoals(userId);
-        setGoals(data);
+
+        // Handle both response formats: direct array or object with goals property
+        const goalsArray = Array.isArray(data) ? data : (data.goals || []);
+        setGoals(goalsArray);
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch goals');
@@ -27,7 +30,7 @@ export const FFEGoals: React.FC<{ userId: string }> = ({ userId }) => {
 
   const activeGoals = goals.filter(g => g.status === 'active');
   const completedGoals = goals.filter(g => g.status === 'completed');
-  const totalValue = goals.reduce((sum, g) => sum + g.value, 0);
+  const totalValue = goals.reduce((sum, g) => sum + (g.importance || 0), 0);
 
   const statusIcon = {
     active: <Clock className="text-blue-500" size={20} />,
@@ -168,17 +171,18 @@ export const FFEGoals: React.FC<{ userId: string }> = ({ userId }) => {
           </div>
         ) : (
           goals.map((goal) => (
-            <div key={goal.id} className={`border-l-4 rounded-lg p-6 ${statusColor[goal.status]}`}>
+            <div key={goal.goal_id || goal.id} className={`border-l-4 rounded-lg p-6 ${statusColor[goal.status] || 'bg-gray-50 border-gray-200'}`}>
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
-                    {statusIcon[goal.status]}
-                    <h3 className="text-lg font-semibold text-gray-800">{goal.title}</h3>
+                    {statusIcon[goal.status] || <Clock className="text-gray-500" size={20} />}
+                    <h3 className="text-lg font-semibold text-gray-800">{goal.description || goal.title || 'Untitled Goal'}</h3>
                   </div>
                   <p className="text-gray-600 text-sm">{goal.description}</p>
+                  {goal.complexity && <p className="text-xs text-gray-500 mt-2">Complexity: <span className="capitalize">{goal.complexity}</span></p>}
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-medium text-gray-600">Value: <span className="text-lg font-bold text-primary-600">{goal.value}</span></p>
+                  <p className="text-sm font-medium text-gray-600">Importance: <span className="text-lg font-bold text-primary-600">{goal.importance || goal.value || 5}/10</span></p>
                 </div>
               </div>
 
@@ -186,7 +190,7 @@ export const FFEGoals: React.FC<{ userId: string }> = ({ userId }) => {
               <div className="mb-4">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-xs font-medium text-gray-600">Progress</span>
-                  <span className="text-xs font-bold text-gray-800">{goal.progress}%</span>
+                  <span className="text-xs font-bold text-gray-800">{goal.progress || 0}%</span>
                 </div>
                 <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                   <div
@@ -197,15 +201,15 @@ export const FFEGoals: React.FC<{ userId: string }> = ({ userId }) => {
                         ? 'bg-yellow-500'
                         : 'bg-primary-500'
                     }`}
-                    style={{ width: `${goal.progress}%` }}
+                    style={{ width: `${goal.progress || 0}%` }}
                   ></div>
                 </div>
               </div>
 
               {/* Metadata */}
               <div className="flex justify-between text-xs text-gray-500">
-                <span>Created: {new Date(goal.created_at).toLocaleDateString()}</span>
-                <span>Updated: {new Date(goal.updated_at).toLocaleDateString()}</span>
+                <span>Created: {goal.created_at ? new Date(goal.created_at).toLocaleDateString() : 'Unknown'}</span>
+                <span>Updated: {goal.updated_at ? new Date(goal.updated_at).toLocaleDateString() : 'Not updated'}</span>
               </div>
             </div>
           ))
