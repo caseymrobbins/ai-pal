@@ -225,10 +225,35 @@ class ApiClient {
 
   // ============ Audit & Security Endpoints ============
 
-  async getAuditLogs(userId: string, limit: number = 100, offset: number = 0) {
+  async getAuditLogs(userId: string, days: number = 30, eventType?: string, severity?: string, limit: number = 100) {
     const response = await this.client.get(`/users/${userId}/audit-logs`, {
-      params: { limit, offset },
+      params: {
+        days,
+        event_type: eventType,
+        severity,
+        limit,
+      },
     });
+    return response.data;
+  }
+
+  async exportAuditLogs(userId: string, days: number = 90, eventType?: string) {
+    const response = await this.client.get(`/users/${userId}/audit-logs/export`, {
+      params: {
+        days,
+        event_type: eventType,
+      },
+    });
+    return response.data;
+  }
+
+  async getAuditStatistics() {
+    const response = await this.client.get('/users/system/audit-stats');
+    return response.data;
+  }
+
+  async getAuditEventTypes() {
+    const response = await this.client.get('/users/system/audit-event-types');
     return response.data;
   }
 

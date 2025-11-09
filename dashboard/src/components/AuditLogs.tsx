@@ -4,12 +4,15 @@ import { useDashboardStore } from '../store/store';
 import { getApiClient } from '../api/client';
 
 interface AuditLog {
-  id: string;
   timestamp: string;
   event_type: string;
-  user_id: string;
-  details: string;
-  severity: 'info' | 'warning' | 'error' | 'critical';
+  user_id?: string;
+  component: string;
+  action: string;
+  details: Record<string, any>;
+  severity: 'debug' | 'info' | 'warning' | 'error' | 'critical';
+  result?: string;
+  resource?: string;
 }
 
 export const AuditLogs: React.FC<{ userId: string }> = ({ userId }) => {
@@ -18,14 +21,26 @@ export const AuditLogs: React.FC<{ userId: string }> = ({ userId }) => {
   const [filteredLogs, setFilteredLogs] = useState<AuditLog[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [severityFilter, setSeverityFilter] = useState<string>('all');
+  const [daysFilter, setDaysFilter] = useState<number>(30);
+  const [eventTypeFilter, setEventTypeFilter] = useState<string>('');
 
   useEffect(() => {
     const fetchLogs = async () => {
       setLoading('audit', true);
       try {
         const client = getApiClient();
-        const data = await client.getAuditLogs(userId, 100);
-        setLogs(data);
+        // Use new API parameters: days, severity, event_type, limit
+        const data = await client.getAuditLogs(
+          userId,
+          daysFilter,
+          eventTypeFilter || undefined,
+          severityFilter !== 'all' ? severityFilter : undefined,
+          100
+        );
+
+        // Handle both response formats: direct array or AuditLogsResponse object
+        const logsArray = Array.isArray(data) ? data : (data.logs || []);
+        setLogs(logsArray);
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch audit logs');
@@ -35,7 +50,7 @@ export const AuditLogs: React.FC<{ userId: string }> = ({ userId }) => {
     };
 
     fetchLogs();
-  }, [userId, setLoading, setError]);
+  }, [userId, daysFilter, eventTypeFilter, severityFilter, setLoading, setError]);
 
   // Filter logs based on search and severity
   useEffect(() => {
@@ -59,6 +74,7 @@ export const AuditLogs: React.FC<{ userId: string }> = ({ userId }) => {
 
 
   const severityBadge = {
+    debug: 'bg-gray-100 text-gray-800',
     info: 'bg-blue-100 text-blue-800',
     warning: 'bg-yellow-100 text-yellow-800',
     error: 'bg-red-100 text-red-800',
@@ -66,6 +82,7 @@ export const AuditLogs: React.FC<{ userId: string }> = ({ userId }) => {
   };
 
   const severityCounts = {
+    debug: logs.filter(l => l.severity === 'debug').length,
     info: logs.filter(l => l.severity === 'info').length,
     warning: logs.filter(l => l.severity === 'warning').length,
     error: logs.filter(l => l.severity === 'error').length,
@@ -117,6 +134,18 @@ export const AuditLogs: React.FC<{ userId: string }> = ({ userId }) => {
             />
           </div>
 
+          {/* Days Filter */}
+          <select
+            value={daysFilter}
+            onChange={(e) => setDaysFilter(parseInt(e.target.value))}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          >
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="180">Last 180 days</option>
+          </select>
+
           {/* Severity Filter */}
           <select
             value={severityFilter}
@@ -124,6 +153,7 @@ export const AuditLogs: React.FC<{ userId: string }> = ({ userId }) => {
             className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           >
             <option value="all">All Severities</option>
+            <option value="debug">Debug</option>
             <option value="info">Info</option>
             <option value="warning">Warning</option>
             <option value="error">Error</option>
@@ -139,8 +169,8 @@ export const AuditLogs: React.FC<{ userId: string }> = ({ userId }) => {
             <tr className="border-b-2 border-gray-200">
               <th className="text-left py-3 px-4 font-semibold text-gray-700">Timestamp</th>
               <th className="text-left py-3 px-4 font-semibold text-gray-700">Event Type</th>
+              <th className="text-left py-3 px-4 font-semibold text-gray-700">Component</th>
               <th className="text-left py-3 px-4 font-semibold text-gray-700">Severity</th>
-              <th className="text-left py-3 px-4 font-semibold text-gray-700">Details</th>
             </tr>
           </thead>
           <tbody>
@@ -152,7 +182,7 @@ export const AuditLogs: React.FC<{ userId: string }> = ({ userId }) => {
               </tr>
             ) : (
               filteredLogs.map((log, idx) => (
-                <tr key={log.id || idx} className="border-b border-gray-200 hover:bg-gray-50 transition">
+                <tr key={`${log.timestamp}-${idx}`} className="border-b border-gray-200 hover:bg-gray-50 transition">
                   <td className="py-3 px-4">
                     <span className="text-gray-600 text-xs">
                       {new Date(log.timestamp).toLocaleString()}
@@ -164,13 +194,11 @@ export const AuditLogs: React.FC<{ userId: string }> = ({ userId }) => {
                     </code>
                   </td>
                   <td className="py-3 px-4">
-                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${severityBadge[log.severity]}`}>
-                      {log.severity.toUpperCase()}
-                    </span>
+                    <span className="text-gray-600 text-xs">{log.component}</span>
                   </td>
                   <td className="py-3 px-4">
-                    <span className="text-gray-600 truncate block max-w-xs" title={log.details}>
-                      {log.details}
+                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${severityBadge[log.severity] || 'bg-gray-100 text-gray-800'}`}>
+                      {log.severity.toUpperCase()}
                     </span>
                   </td>
                 </tr>

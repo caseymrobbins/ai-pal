@@ -33,6 +33,7 @@ from ai_pal.api import tasks as tasks_router
 from ai_pal.api import health as health_router
 from ai_pal.api import ari as ari_router
 from ai_pal.api import goals as goals_router
+from ai_pal.api import audit as audit_router
 from ai_pal.tasks.celery_app import app as celery_app
 from pathlib import Path
 
@@ -264,6 +265,7 @@ app.include_router(tasks_router.router)
 app.include_router(health_router.router)
 app.include_router(ari_router.router)
 app.include_router(goals_router.router)
+app.include_router(audit_router.router)
 
 
 # ===== CORE AC SYSTEM =====
