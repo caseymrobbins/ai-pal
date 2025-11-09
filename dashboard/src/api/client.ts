@@ -85,6 +85,16 @@ class ApiClient {
     return response.data;
   }
 
+  async getDashboardHealth() {
+    const response = await this.client.get('/system/health/dashboard');
+    return response.data;
+  }
+
+  async getServicesHealth() {
+    const response = await this.client.get('/system/health/services');
+    return response.data;
+  }
+
   // ============ User Endpoints ============
 
   async getUserProfile(userId: string) {

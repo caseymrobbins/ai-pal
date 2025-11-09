@@ -30,6 +30,9 @@ from ai_pal.core.integrated_system import IntegratedACSystem, SystemConfig
 from ai_pal.monitoring import get_health_checker, get_metrics, get_logger
 from ai_pal.storage.database import DatabaseManager, BackgroundTaskRepository
 from ai_pal.api import tasks as tasks_router
+from ai_pal.api import health as health_router
+from ai_pal.api import ari as ari_router
+from ai_pal.api import goals as goals_router
 from ai_pal.tasks.celery_app import app as celery_app
 from pathlib import Path
 
@@ -227,6 +230,12 @@ async def startup_event():
         # Setup tasks router with database manager
         tasks_router.set_db_manager(db_manager)
 
+        # Setup ARI router with database manager
+        ari_router.set_db_manager(db_manager)
+
+        # Setup goals router with database manager
+        goals_router.set_db_manager(db_manager)
+
         # Setup Celery task base class with database
         from ai_pal.tasks.base_task import AIpalTask
         AIpalTask.setup_db(db_manager)
@@ -250,8 +259,11 @@ async def shutdown_event():
         logger.error(f"Error during shutdown: {exc}", exc_info=True)
 
 
-# Register background task routes
+# Register API routers
 app.include_router(tasks_router.router)
+app.include_router(health_router.router)
+app.include_router(ari_router.router)
+app.include_router(goals_router.router)
 
 
 # ===== CORE AC SYSTEM =====

@@ -32,51 +32,27 @@ export const SystemHealth: React.FC<{ userId: string }> = ({ userId }) => {
       try {
         const client = getApiClient();
 
-        // Fetch health status
-        const healthData = await client.getHealth();
-        const mockServices: ServiceStatus[] = [
-          {
-            name: 'API Server',
-            status: healthData.status === 'healthy' ? 'healthy' : 'degraded',
-            responseTime: 45,
-            uptime: 99.9,
-          },
-          {
-            name: 'Database',
-            status: 'healthy',
-            responseTime: 12,
-            uptime: 99.95,
-          },
-          {
-            name: 'Redis Cache',
-            status: 'healthy',
-            responseTime: 5,
-            uptime: 99.8,
-          },
-          {
-            name: 'Model Service',
-            status: 'healthy',
-            responseTime: 250,
-            uptime: 99.5,
-          },
-          {
-            name: 'Background Jobs',
-            status: 'healthy',
-            responseTime: 100,
-            uptime: 99.7,
-          },
-        ];
-        setServices(mockServices);
+        // Fetch real dashboard health data from API
+        const healthData = await client.getDashboardHealth();
 
-        // Generate mock metrics
-        const mockMetrics: MetricDataPoint[] = Array.from({ length: 24 }, (_, i) => ({
-          timestamp: `${i}:00`,
-          requests: Math.floor(Math.random() * 1000 + 500),
-          errors: Math.floor(Math.random() * 50),
-          latency: Math.floor(Math.random() * 100 + 30),
-          memory: Math.floor(Math.random() * 60 + 40),
+        // Convert API response to component state
+        const apiServices: ServiceStatus[] = healthData.services.map((service: any) => ({
+          name: service.name,
+          status: service.status,
+          responseTime: service.responseTime,
+          uptime: service.uptime,
         }));
-        setMetrics(mockMetrics);
+        setServices(apiServices);
+
+        // Use real metrics from API
+        const apiMetrics: MetricDataPoint[] = healthData.metrics.map((metric: any) => ({
+          timestamp: metric.timestamp,
+          requests: metric.requests,
+          errors: metric.errors,
+          latency: metric.latency,
+          memory: metric.memory,
+        }));
+        setMetrics(apiMetrics);
 
         setError(null);
       } catch (err) {
