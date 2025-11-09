@@ -17,7 +17,7 @@ Authentication: Bearer token (JWT)
 Rate limiting: Configured per endpoint
 """
 
-from fastapi import FastAPI, HTTPException, Depends, Header, status
+from fastapi import FastAPI, HTTPException, Depends, Header, status, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -35,6 +35,8 @@ from ai_pal.api import ari as ari_router
 from ai_pal.api import goals as goals_router
 from ai_pal.api import audit as audit_router
 from ai_pal.api import dashboard as dashboard_router
+from ai_pal.api import predictions as predictions_router
+from ai_pal.api.websocket import manager as ws_manager, start_heartbeat_task
 from ai_pal.tasks.celery_app import app as celery_app
 from pathlib import Path
 
@@ -241,11 +243,18 @@ async def startup_event():
         # Setup dashboard router with database manager
         dashboard_router.set_db_manager(db_manager)
 
+        # Setup predictions router with database manager
+        predictions_router.set_db_manager(db_manager)
+
         # Setup Celery task base class with database
         from ai_pal.tasks.base_task import AIpalTask
         AIpalTask.setup_db(db_manager)
 
         logger.info("Background task system initialized")
+
+        # Start WebSocket heartbeat task
+        await start_heartbeat_task()
+        logger.info("WebSocket heartbeat task started")
 
     except Exception as exc:
         logger.error(f"Error during startup: {exc}", exc_info=True)
@@ -271,6 +280,58 @@ app.include_router(ari_router.router)
 app.include_router(goals_router.router)
 app.include_router(audit_router.router)
 app.include_router(dashboard_router.router)
+app.include_router(predictions_router.router)
+
+
+# ===== WEBSOCKET ENDPOINT =====
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time dashboard updates
+
+    Accepts WebSocket connections without authentication for broadcast updates.
+    Connect to receive real-time notifications about:
+    - Task status changes
+    - Goal updates
+    - System health changes
+    - Critical events
+    """
+    await ws_manager.connect(websocket)
+    try:
+        while True:
+            # Keep connection alive and listen for messages
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        await ws_manager.disconnect(websocket)
+        logger.info("WebSocket connection closed")
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+        await ws_manager.disconnect(websocket)
+
+
+@app.websocket("/ws/{user_id}")
+async def websocket_user_endpoint(websocket: WebSocket, user_id: str):
+    """
+    WebSocket endpoint for user-specific real-time updates
+
+    Accepts WebSocket connections for a specific user to receive:
+    - Task status changes for their tasks
+    - Goal updates for their goals
+    - System health changes
+    - Critical events relevant to the user
+    """
+    await ws_manager.connect(websocket, user_id)
+    try:
+        while True:
+            # Keep connection alive and listen for messages
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        await ws_manager.disconnect(websocket, user_id)
+        logger.info(f"WebSocket connection closed for user {user_id}")
+    except Exception as e:
+        logger.error(f"WebSocket error for user {user_id}: {e}")
+        await ws_manager.disconnect(websocket, user_id)
 
 
 # ===== CORE AC SYSTEM =====

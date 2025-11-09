@@ -369,6 +369,27 @@ class ApiClient {
     return response.data;
   }
 
+  // ============ Predictions & Analytics Endpoints ============
+
+  async forecastARITrend(userId: string, daysAhead: number = 7) {
+    const response = await this.client.get(`/users/${userId}/ari/forecast`, {
+      params: { days_ahead: daysAhead },
+    });
+    return response.data;
+  }
+
+  async predictGoalCompletion(userId: string, goalId: string) {
+    const response = await this.client.get(
+      `/users/${userId}/goals/${goalId}/completion-estimate`
+    );
+    return response.data;
+  }
+
+  async predictSystemHealth(userId: string) {
+    const response = await this.client.get(`/users/${userId}/system/predictions`);
+    return response.data;
+  }
+
   // ============ Chat Endpoint ============
 
   async chat(message: string, context?: Record<string, any>) {
