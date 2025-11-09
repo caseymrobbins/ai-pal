@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: ai-pal
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard  # Change based on your cluster's storage classes
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-pvc
+  namespace: ai-pal
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: logs-pvc
+  namespace: ai-pal
+spec:
+  accessModes:
+    - ReadWriteMany  # Shared across pods
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 10Gi

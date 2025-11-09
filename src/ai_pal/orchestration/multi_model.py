@@ -28,6 +28,10 @@ from loguru import logger
 from ai_pal.models.local import LocalLLMProvider
 from ai_pal.models.anthropic_provider import AnthropicProvider
 from ai_pal.models.openai_provider import OpenAIProvider
+from ai_pal.models.google_provider import GoogleProvider
+from ai_pal.models.cohere_provider import CohereProvider
+from ai_pal.models.mistral_provider import MistralProvider
+from ai_pal.models.groq_provider import GroqProvider
 from ai_pal.models.base import LLMRequest, LLMResponse
 
 
@@ -36,7 +40,10 @@ class ModelProvider(Enum):
     LOCAL = "local"  # Local SLM (Phi-2, Llama, etc.)
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
+    GOOGLE = "google"  # Google Gemini
     COHERE = "cohere"
+    MISTRAL = "mistral"
+    GROQ = "groq"  # Ultra-fast inference
 
 
 class TaskComplexity(Enum):
@@ -106,6 +113,9 @@ class TaskRequirements:
     # Privacy requirements
     sensitive_data: bool = False
     requires_local: bool = False
+
+    # Model preference
+    preferred_model: Optional[str] = None  # User's preferred model (e.g., "tinyllama", "phi-2")
 
     # Context
     estimated_input_tokens: int = 100
@@ -316,6 +326,210 @@ class MultiModelOrchestrator:
             local_execution=False
         )
 
+        # Google Gemini models
+        self.model_capabilities[(ModelProvider.GOOGLE, "gemini-1.5-pro")] = ModelCapabilities(
+            provider=ModelProvider.GOOGLE,
+            model_name="gemini-1.5-pro",
+            max_tokens=8192,
+            supports_streaming=True,
+            supports_functions=True,
+            supports_vision=True,
+            reasoning_capability=0.90,
+            knowledge_breadth=0.92,
+            code_capability=0.88,
+            creative_capability=0.87,
+            input_cost=0.00125,  # $1.25 per 1M tokens
+            output_cost=0.005,  # $5.00 per 1M tokens
+            typical_latency_ms=1500,
+            availability=0.995,
+            data_retention_days=18,  # Google's retention policy
+            trains_on_data=False,  # With paid API
+            local_execution=False
+        )
+
+        self.model_capabilities[(ModelProvider.GOOGLE, "gemini-1.5-flash")] = ModelCapabilities(
+            provider=ModelProvider.GOOGLE,
+            model_name="gemini-1.5-flash",
+            max_tokens=8192,
+            supports_streaming=True,
+            supports_functions=True,
+            supports_vision=True,
+            reasoning_capability=0.80,
+            knowledge_breadth=0.85,
+            code_capability=0.78,
+            creative_capability=0.75,
+            input_cost=0.000075,  # $0.075 per 1M tokens (VERY CHEAP!)
+            output_cost=0.0003,  # $0.30 per 1M tokens
+            typical_latency_ms=600,
+            availability=0.998,
+            data_retention_days=18,
+            trains_on_data=False,
+            local_execution=False
+        )
+
+        self.model_capabilities[(ModelProvider.GOOGLE, "gemini-pro")] = ModelCapabilities(
+            provider=ModelProvider.GOOGLE,
+            model_name="gemini-pro",
+            max_tokens=8192,
+            supports_streaming=True,
+            supports_functions=False,
+            supports_vision=False,
+            reasoning_capability=0.75,
+            knowledge_breadth=0.80,
+            code_capability=0.72,
+            creative_capability=0.70,
+            input_cost=0.0005,  # $0.50 per 1M tokens
+            output_cost=0.0015,  # $1.50 per 1M tokens
+            typical_latency_ms=1000,
+            availability=0.998,
+            data_retention_days=18,
+            trains_on_data=False,
+            local_execution=False
+        )
+
+        # Cohere models
+        self.model_capabilities[(ModelProvider.COHERE, "command-r-plus")] = ModelCapabilities(
+            provider=ModelProvider.COHERE,
+            model_name="command-r-plus",
+            max_tokens=4096,
+            supports_streaming=True,
+            supports_functions=True,
+            supports_vision=False,
+            reasoning_capability=0.88,
+            knowledge_breadth=0.90,
+            code_capability=0.85,
+            creative_capability=0.85,
+            input_cost=0.003,  # $3.00 per 1M tokens
+            output_cost=0.015,  # $15.00 per 1M tokens
+            typical_latency_ms=1200,
+            availability=0.995,
+            data_retention_days=30,
+            trains_on_data=False,
+            local_execution=False
+        )
+
+        self.model_capabilities[(ModelProvider.COHERE, "command-r")] = ModelCapabilities(
+            provider=ModelProvider.COHERE,
+            model_name="command-r",
+            max_tokens=4096,
+            supports_streaming=True,
+            supports_functions=True,
+            supports_vision=False,
+            reasoning_capability=0.80,
+            knowledge_breadth=0.85,
+            code_capability=0.78,
+            creative_capability=0.80,
+            input_cost=0.0005,  # $0.50 per 1M tokens
+            output_cost=0.0015,  # $1.50 per 1M tokens
+            typical_latency_ms=900,
+            availability=0.998,
+            data_retention_days=30,
+            trains_on_data=False,
+            local_execution=False
+        )
+
+        # Mistral AI models
+        self.model_capabilities[(ModelProvider.MISTRAL, "mistral-large-latest")] = ModelCapabilities(
+            provider=ModelProvider.MISTRAL,
+            model_name="mistral-large-latest",
+            max_tokens=32000,
+            supports_streaming=True,
+            supports_functions=True,
+            supports_vision=False,
+            reasoning_capability=0.92,
+            knowledge_breadth=0.90,
+            code_capability=0.90,
+            creative_capability=0.88,
+            input_cost=0.004,  # $4.00 per 1M tokens
+            output_cost=0.012,  # $12.00 per 1M tokens
+            typical_latency_ms=1400,
+            availability=0.995,
+            data_retention_days=0,  # No retention on paid tier
+            trains_on_data=False,
+            local_execution=False
+        )
+
+        self.model_capabilities[(ModelProvider.MISTRAL, "mistral-small-latest")] = ModelCapabilities(
+            provider=ModelProvider.MISTRAL,
+            model_name="mistral-small-latest",
+            max_tokens=32000,
+            supports_streaming=True,
+            supports_functions=True,
+            supports_vision=False,
+            reasoning_capability=0.78,
+            knowledge_breadth=0.80,
+            code_capability=0.80,
+            creative_capability=0.75,
+            input_cost=0.001,  # $1.00 per 1M tokens
+            output_cost=0.003,  # $3.00 per 1M tokens
+            typical_latency_ms=800,
+            availability=0.998,
+            data_retention_days=0,
+            trains_on_data=False,
+            local_execution=False
+        )
+
+        # Groq models (ultra-fast inference)
+        self.model_capabilities[(ModelProvider.GROQ, "llama-3.1-70b-versatile")] = ModelCapabilities(
+            provider=ModelProvider.GROQ,
+            model_name="llama-3.1-70b-versatile",
+            max_tokens=8192,
+            supports_streaming=True,
+            supports_functions=False,
+            supports_vision=False,
+            reasoning_capability=0.88,
+            knowledge_breadth=0.87,
+            code_capability=0.85,
+            creative_capability=0.85,
+            input_cost=0.00059,  # $0.59 per 1M tokens
+            output_cost=0.00079,  # $0.79 per 1M tokens
+            typical_latency_ms=150,  # ULTRA FAST!
+            availability=0.998,
+            data_retention_days=30,
+            trains_on_data=False,
+            local_execution=False
+        )
+
+        self.model_capabilities[(ModelProvider.GROQ, "llama-3.1-8b-instant")] = ModelCapabilities(
+            provider=ModelProvider.GROQ,
+            model_name="llama-3.1-8b-instant",
+            max_tokens=8192,
+            supports_streaming=True,
+            supports_functions=False,
+            supports_vision=False,
+            reasoning_capability=0.75,
+            knowledge_breadth=0.78,
+            code_capability=0.75,
+            creative_capability=0.73,
+            input_cost=0.00005,  # $0.05 per 1M tokens (VERY CHEAP!)
+            output_cost=0.0001,  # $0.10 per 1M tokens
+            typical_latency_ms=100,  # BLAZING FAST!
+            availability=0.998,
+            data_retention_days=30,
+            trains_on_data=False,
+            local_execution=False
+        )
+
+        self.model_capabilities[(ModelProvider.GROQ, "mixtral-8x7b-32768")] = ModelCapabilities(
+            provider=ModelProvider.GROQ,
+            model_name="mixtral-8x7b-32768",
+            max_tokens=32768,
+            supports_streaming=True,
+            supports_functions=False,
+            supports_vision=False,
+            reasoning_capability=0.82,
+            knowledge_breadth=0.83,
+            code_capability=0.80,
+            creative_capability=0.78,
+            input_cost=0.00024,  # $0.24 per 1M tokens
+            output_cost=0.00024,  # $0.24 per 1M tokens
+            typical_latency_ms=120,  # SUPER FAST!
+            availability=0.998,
+            data_retention_days=30,
+            trains_on_data=False,
+            local_execution=False
+        )
+
     def _load_performance_data(self) -> None:
         """Load historical performance data"""
         performance_file = self.storage_dir / "model_performance.json"
@@ -357,6 +571,9 @@ class MultiModelOrchestrator:
         """
         Select optimal model for task
 
+        Respects user's preferred_model for simple tasks, but may override
+        for complex tasks that require more capable models.
+
         Args:
             requirements: Task requirements
             optimization_goal: Optimization strategy (uses default if None)
@@ -365,6 +582,31 @@ class MultiModelOrchestrator:
             Model selection with reasoning
         """
         goal = optimization_goal or self.default_optimization_goal
+
+        # Check if user has a preferred model and task is appropriate for it
+        if requirements.preferred_model:
+            # For simple/moderate tasks (including chat), respect user preference
+            if requirements.complexity in [TaskComplexity.TRIVIAL, TaskComplexity.SIMPLE, TaskComplexity.MODERATE]:
+                logger.info(
+                    f"Using user's preferred model '{requirements.preferred_model}' "
+                    f"for {requirements.complexity.value} task"
+                )
+                return ModelSelection(
+                    provider=ModelProvider.LOCAL,
+                    model_name=requirements.preferred_model,
+                    confidence=0.85,
+                    estimated_cost=0.0,
+                    estimated_latency_ms=200,
+                    expected_quality=0.75,
+                    selection_reason=f"User preference: {requirements.preferred_model}",
+                    optimization_goal=goal
+                )
+            else:
+                # For complex/expert tasks, override to more capable model
+                logger.info(
+                    f"User prefers '{requirements.preferred_model}' but task complexity "
+                    f"is {requirements.complexity.value} - using more capable model for best results"
+                )
 
         # Filter models by requirements
         candidate_models = self._filter_by_requirements(requirements)
@@ -664,6 +906,14 @@ class MultiModelOrchestrator:
             self.providers[provider] = OpenAIProvider()
         elif provider == ModelProvider.ANTHROPIC:
             self.providers[provider] = AnthropicProvider()
+        elif provider == ModelProvider.GOOGLE:
+            self.providers[provider] = GoogleProvider()
+        elif provider == ModelProvider.COHERE:
+            self.providers[provider] = CohereProvider()
+        elif provider == ModelProvider.MISTRAL:
+            self.providers[provider] = MistralProvider()
+        elif provider == ModelProvider.GROQ:
+            self.providers[provider] = GroqProvider()
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
@@ -850,15 +1100,62 @@ class MultiModelOrchestrator:
         # Select model
         selection = await self.select_model(requirements, opt_goal)
 
-        # Execute model
-        response = await self.execute_model(
-            provider=selection.provider,
-            model_name=selection.model_name,
-            prompt=prompt,
-            system_prompt=system_prompt,
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
+        # Execute model with automatic cloud fallback
+        try:
+            response = await self.execute_model(
+                provider=selection.provider,
+                model_name=selection.model_name,
+                prompt=prompt,
+                system_prompt=system_prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+        except (RuntimeError, ConnectionError) as e:
+            # Local model failed, try cloud fallback
+            logger.warning(
+                f"Local model {selection.model_name} failed: {e}. "
+                f"Attempting cloud fallback..."
+            )
+
+            # Try cloud providers in order of preference
+            # Cloud fallback chain: ordered by cost/speed, most affordable first
+            cloud_providers = [
+                (ModelProvider.GROQ, "llama-3.1-8b-instant"),  # Blazing fast, ultra cheap ($0.05/$0.10 per 1M)
+                (ModelProvider.GOOGLE, "gemini-1.5-flash"),  # Very cheap ($0.075/$0.30 per 1M)
+                (ModelProvider.COHERE, "command-r"),  # Good balance ($0.50/$1.50 per 1M)
+                (ModelProvider.ANTHROPIC, "claude-3-haiku-20240307"),  # Fast Claude ($0.25/$1.25 per 1M)
+                (ModelProvider.MISTRAL, "mistral-small-latest"),  # European option ($1.00/$3.00 per 1M)
+                (ModelProvider.OPENAI, "gpt-3.5-turbo"),  # Reliable fallback ($0.50/$1.50 per 1M)
+                (ModelProvider.GOOGLE, "gemini-1.5-pro"),  # High quality backup
+            ]
+
+            fallback_error = None
+            for provider, model in cloud_providers:
+                try:
+                    logger.info(f"Trying cloud fallback: {provider.value}:{model}")
+                    response = await self.execute_model(
+                        provider=provider,
+                        model_name=model,
+                        prompt=prompt,
+                        system_prompt=system_prompt,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                    )
+                    logger.info(f"✓ Cloud fallback successful: {provider.value}:{model}")
+                    break  # Success!
+                except Exception as fallback_e:
+                    fallback_error = fallback_e
+                    logger.debug(f"Cloud fallback {provider.value} failed: {fallback_e}")
+                    continue
+            else:
+                # All fallbacks failed
+                logger.error("All local and cloud fallbacks failed")
+                raise RuntimeError(
+                    f"All generation methods failed. "
+                    f"Local: {e}. "
+                    f"Cloud: {fallback_error}. "
+                    f"Please check API keys or install transformers/ollama."
+                )
 
         # Return simplified dict
         return {

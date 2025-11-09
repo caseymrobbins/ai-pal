@@ -10,6 +10,7 @@ Endpoints:
 - /api/ffe - Fractal Flow Engine
 - /api/social - Social features
 - /api/personality - Personality discovery
+- /api/tasks - Background task management
 - /metrics - Prometheus metrics
 
 Authentication: Bearer token (JWT)
@@ -27,6 +28,9 @@ import os
 # Import AI-PAL components
 from ai_pal.core.integrated_system import IntegratedACSystem, SystemConfig
 from ai_pal.monitoring import get_health_checker, get_metrics, get_logger
+from ai_pal.storage.database import DatabaseManager, BackgroundTaskRepository
+from ai_pal.api import tasks as tasks_router
+from ai_pal.tasks.celery_app import app as celery_app
 from pathlib import Path
 
 # Initialize
@@ -51,6 +55,9 @@ app.add_middleware(
 
 # Initialize AC system (singleton)
 _ac_system: Optional[IntegratedACSystem] = None
+
+# Initialize database manager for background tasks (singleton)
+_db_manager: Optional[DatabaseManager] = None
 
 
 def get_ac_system() -> IntegratedACSystem:
@@ -81,6 +88,28 @@ def get_ac_system() -> IntegratedACSystem:
         )
         _ac_system = IntegratedACSystem(config=config)
     return _ac_system
+
+
+def get_db_manager() -> DatabaseManager:
+    """Get or create database manager instance for background tasks"""
+    global _db_manager
+    if _db_manager is None:
+        # Get database URL from environment or use default
+        database_url = os.getenv(
+            "DATABASE_URL",
+            "sqlite+aiosqlite:///./ai_pal.db"
+        )
+
+        _db_manager = DatabaseManager(
+            database_url=database_url,
+            echo=os.getenv("DB_ECHO", "false").lower() == "true",
+            pool_size=int(os.getenv("DB_POOL_SIZE", "5")),
+            max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "10"))
+        )
+
+        logger.info(f"Database manager initialized with {database_url}")
+
+    return _db_manager
 
 
 # ===== REQUEST/RESPONSE MODELS =====
@@ -182,6 +211,47 @@ async def metrics():
     """
     metrics_collector = get_metrics()
     return metrics_collector.export_prometheus()
+
+
+# ===== APP STARTUP/SHUTDOWN =====
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize background systems on startup"""
+    try:
+        # Initialize database manager and create tables
+        db_manager = get_db_manager()
+        await db_manager.create_tables()
+        logger.info("Database tables created/verified")
+
+        # Setup tasks router with database manager
+        tasks_router.set_db_manager(db_manager)
+
+        # Setup Celery task base class with database
+        from ai_pal.tasks.base_task import AIpalTask
+        AIpalTask.setup_db(db_manager)
+
+        logger.info("Background task system initialized")
+
+    except Exception as exc:
+        logger.error(f"Error during startup: {exc}", exc_info=True)
+        raise
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Clean up resources on shutdown"""
+    try:
+        if _db_manager:
+            await _db_manager.close()
+            logger.info("Database connections closed")
+
+    except Exception as exc:
+        logger.error(f"Error during shutdown: {exc}", exc_info=True)
+
+
+# Register background task routes
+app.include_router(tasks_router.router)
 
 
 # ===== CORE AC SYSTEM =====
@@ -917,6 +987,12 @@ class TeachingRequest(BaseModel):
     examples: Optional[List[str]] = None
 
 
+class PatchApprovalRequest(BaseModel):
+    """Request to approve/deny a patch request"""
+    approved: bool
+    review_comment: Optional[str] = None
+
+
 @app.post("/api/teaching/submit", tags=["Teaching"])
 async def submit_teaching_content(
     request: TeachingRequest,
@@ -967,6 +1043,188 @@ async def get_taught_topics(
 
     except Exception as e:
         logger.error("Taught topics retrieval failed", user_id=user_id, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===== PATCH REQUESTS (AI SELF-IMPROVEMENT) =====
+
+@app.get("/api/patch-requests", tags=["Patch Requests"])
+async def get_patch_requests(
+    status: Optional[str] = None,
+    limit: int = 50,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Get AI code modification patch requests
+
+    Shows pending, approved, denied, and applied patch requests.
+    This endpoint allows users to review what the AI wants to change.
+
+    Args:
+        status: Filter by status (PENDING_APPROVAL, APPROVED, DENIED, APPLIED, FAILED)
+        limit: Maximum number of requests to return
+    """
+    ac_system = get_ac_system()
+
+    # Check if patch manager is available
+    if not hasattr(ac_system, 'patch_manager') or not ac_system.patch_manager:
+        raise HTTPException(
+            status_code=503,
+            detail="Patch request system not available"
+        )
+
+    try:
+        if status:
+            requests = await ac_system.patch_manager.patch_repository.get_requests_by_status(
+                status=status,
+                limit=limit
+            )
+        else:
+            requests = await ac_system.patch_manager.get_request_history(limit=limit)
+
+        return {
+            "patch_requests": requests,
+            "total": len(requests)
+        }
+
+    except Exception as e:
+        logger.error("Patch request retrieval failed", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/patch-requests/pending", tags=["Patch Requests"])
+async def get_pending_patch_requests(
+    limit: int = 20,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Get pending patch requests awaiting approval
+
+    Returns only requests that need human review.
+    """
+    ac_system = get_ac_system()
+
+    if not hasattr(ac_system, 'patch_manager') or not ac_system.patch_manager:
+        raise HTTPException(status_code=503, detail="Patch request system not available")
+
+    try:
+        pending = await ac_system.patch_manager.get_pending_requests(limit=limit)
+
+        return {
+            "pending_requests": pending,
+            "total_pending": len(pending)
+        }
+
+    except Exception as e:
+        logger.error("Pending patch request retrieval failed", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/patch-requests/{request_id}", tags=["Patch Requests"])
+async def get_patch_request_details(
+    request_id: str,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Get detailed information about a specific patch request
+
+    Includes full diff, reasoning, and all metadata.
+    """
+    ac_system = get_ac_system()
+
+    if not hasattr(ac_system, 'patch_manager') or not ac_system.patch_manager:
+        raise HTTPException(status_code=503, detail="Patch request system not available")
+
+    try:
+        request = await ac_system.patch_manager.get_request(request_id)
+
+        if not request:
+            raise HTTPException(status_code=404, detail="Patch request not found")
+
+        return request
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Patch request {request_id} retrieval failed", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/patch-requests/{request_id}/approve", tags=["Patch Requests"])
+async def approve_patch_request(
+    request_id: str,
+    request: PatchApprovalRequest,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Approve or deny a patch request
+
+    If approved, the patch will be automatically applied to the codebase.
+    If denied, the AI will learn from the rejection.
+
+    IMPORTANT: This endpoint modifies actual source code files.
+    Review the patch carefully before approving.
+    """
+    ac_system = get_ac_system()
+
+    if not hasattr(ac_system, 'patch_manager') or not ac_system.patch_manager:
+        raise HTTPException(status_code=503, detail="Patch request system not available")
+
+    try:
+        from ..improvement.patch_manager import PatchApproval
+
+        approval = PatchApproval(
+            request_id=request_id,
+            approved=request.approved,
+            reviewed_by=user_id,
+            review_comment=request.review_comment
+        )
+
+        success = await ac_system.patch_manager.process_approval(approval)
+
+        action = "approved and applied" if request.approved and success else \
+                 "approved but failed to apply" if request.approved else \
+                 "denied"
+
+        return {
+            "success": success if request.approved else True,
+            "message": f"Patch request {action}",
+            "request_id": request_id,
+            "action": "APPLIED" if (request.approved and success) else \
+                     "FAILED" if request.approved else "DENIED"
+        }
+
+    except Exception as e:
+        logger.error(f"Patch approval processing failed for {request_id}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/patch-requests/protected-files", tags=["Patch Requests"])
+async def get_protected_files(
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Get list of protected files that cannot be modified by AI
+
+    Protected files include core ethical framework components
+    that ensure the AI cannot modify its own constraints.
+    """
+    ac_system = get_ac_system()
+
+    if not hasattr(ac_system, 'patch_manager') or not ac_system.patch_manager:
+        raise HTTPException(status_code=503, detail="Patch request system not available")
+
+    try:
+        protected_files = ac_system.patch_manager.get_protected_files()
+
+        return {
+            "protected_files": protected_files,
+            "total": len(protected_files),
+            "description": "These files are protected and cannot be modified by AI self-improvement"
+        }
+
+    except Exception as e:
+        logger.error("Protected files retrieval failed", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

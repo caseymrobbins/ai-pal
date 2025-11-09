@@ -352,3 +352,45 @@ class GateSystem:
     def get_failed_gates(self, results: Dict[GateType, GateResult]) -> List[GateType]:
         """Get list of gates that failed."""
         return [gate_type for gate_type, result in results.items() if not result.passed]
+
+    async def validate_patch_request(
+        self,
+        target_file: str,
+        protected_files: List[str]
+    ) -> bool:
+        """
+        Validate a patch request against protected files.
+
+        This is the gate that prevents AI from modifying core ethical
+        framework files. Requests targeting protected files are silently
+        denied.
+
+        Args:
+            target_file: File the AI wants to modify
+            protected_files: List of protected kernel files
+
+        Returns:
+            True if patch is allowed, False if denied
+        """
+        from pathlib import Path
+
+        # Normalize paths for comparison
+        target_path = Path(target_file).as_posix()
+
+        for protected in protected_files:
+            protected_path = Path(protected).as_posix()
+
+            # Check exact match or if target is within protected directory
+            if target_path == protected_path or \
+               target_path.startswith(protected_path + "/"):
+                logger.warning(
+                    f"Patch request DENIED by Gate System: "
+                    f"{target_file} is protected (matches {protected})"
+                )
+                return False
+
+        logger.info(
+            f"Patch request APPROVED by Gate System: "
+            f"{target_file} is not protected"
+        )
+        return True
