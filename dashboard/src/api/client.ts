@@ -95,6 +95,13 @@ class ApiClient {
     return response.data;
   }
 
+  // ============ Dashboard Endpoints ============
+
+  async getDashboardSummary(userId: string) {
+    const response = await this.client.get(`/users/${userId}/dashboard-summary`);
+    return response.data;
+  }
+
   // ============ User Endpoints ============
 
   async getUserProfile(userId: string) {

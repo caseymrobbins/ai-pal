@@ -34,6 +34,7 @@ from ai_pal.api import health as health_router
 from ai_pal.api import ari as ari_router
 from ai_pal.api import goals as goals_router
 from ai_pal.api import audit as audit_router
+from ai_pal.api import dashboard as dashboard_router
 from ai_pal.tasks.celery_app import app as celery_app
 from pathlib import Path
 
@@ -237,6 +238,9 @@ async def startup_event():
         # Setup goals router with database manager
         goals_router.set_db_manager(db_manager)
 
+        # Setup dashboard router with database manager
+        dashboard_router.set_db_manager(db_manager)
+
         # Setup Celery task base class with database
         from ai_pal.tasks.base_task import AIpalTask
         AIpalTask.setup_db(db_manager)
@@ -266,6 +270,7 @@ app.include_router(health_router.router)
 app.include_router(ari_router.router)
 app.include_router(goals_router.router)
 app.include_router(audit_router.router)
+app.include_router(dashboard_router.router)
 
 
 # ===== CORE AC SYSTEM =====
