@@ -11,20 +11,28 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 from ai_pal.monitoring import get_logger
 from ai_pal.storage.database import DatabaseManager, ARIRepository, GoalRepository
+from ai_pal.cache.redis_cache import RedisCache
 from ai_pal.analytics.forecasting import ARIForecaster
 from ai_pal.analytics.goal_prediction import GoalPredictor
 
 logger = get_logger("ai_pal.api.predictions")
 router = APIRouter(prefix="/api/users", tags=["Predictions"])
 
-# Store db_manager reference (set during app startup)
+# Store db_manager and cache references (set during app startup)
 _db_manager: Optional[DatabaseManager] = None
+_cache: Optional[RedisCache] = None
 
 
 def set_db_manager(db_manager: DatabaseManager):
     """Set database manager instance"""
     global _db_manager
     _db_manager = db_manager
+
+
+def set_cache(cache: RedisCache):
+    """Set Redis cache instance"""
+    global _cache
+    _cache = cache
 
 
 # ===== RESPONSE MODELS =====

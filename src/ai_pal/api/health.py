@@ -284,3 +284,70 @@ async def get_services_health() -> List[ServiceStatus]:
     """
     response = await get_dashboard_health()
     return response.services
+
+
+# ===== CACHE HEALTH ENDPOINTS =====
+
+class CacheMetricsResponse(BaseModel):
+    """Cache health metrics response"""
+    redis_connected: bool = Field(..., description="Redis connection status")
+    response_time_ms: float = Field(..., description="Average response time in milliseconds")
+    memory_used_mb: Optional[float] = Field(None, description="Memory used in MB")
+    keys_count: int = Field(..., description="Number of cached keys")
+    hit_rate: float = Field(..., description="Cache hit rate (0-1)")
+    evictions_per_minute: float = Field(..., description="Cache evictions per minute")
+    timestamp: str = Field(..., description="Metrics timestamp")
+    status: str = Field(..., description="Overall cache status: healthy, degraded, unhealthy")
+
+
+@router.get("/cache-health", response_model=CacheMetricsResponse)
+async def get_cache_health() -> CacheMetricsResponse:
+    """
+    Get Redis cache health metrics.
+
+    Returns detailed cache performance metrics including hit rate, memory usage,
+    and connection status.
+
+    Returns:
+        CacheMetricsResponse with cache metrics and health status
+    """
+    try:
+        from ai_pal.cache.health import CacheHealthChecker
+        from ai_pal.cache.redis_cache import RedisCache
+
+        # Get cache instance
+        cache = RedisCache()
+        health_checker = CacheHealthChecker(cache)
+
+        # Get metrics
+        metrics = await health_checker.check_health()
+
+        # Determine status
+        is_healthy = await health_checker.is_healthy()
+        status = "healthy" if is_healthy else "degraded"
+        if not metrics.redis_connected:
+            status = "unhealthy"
+
+        return CacheMetricsResponse(
+            redis_connected=metrics.redis_connected,
+            response_time_ms=metrics.response_time_ms,
+            memory_used_mb=metrics.memory_used_mb,
+            keys_count=metrics.keys_count,
+            hit_rate=metrics.hit_rate,
+            evictions_per_minute=metrics.evictions_per_minute,
+            timestamp=metrics.timestamp,
+            status=status
+        )
+
+    except Exception as e:
+        logger.error(f"Error checking cache health: {e}")
+        return CacheMetricsResponse(
+            redis_connected=False,
+            response_time_ms=0,
+            memory_used_mb=None,
+            keys_count=0,
+            hit_rate=0,
+            evictions_per_minute=0,
+            timestamp=datetime.utcnow().isoformat() + "Z",
+            status="unhealthy"
+        )

@@ -6,16 +6,19 @@ Provides access to ARI metrics and snapshots for user dashboard.
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Path
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from datetime import datetime, timedelta
 from ai_pal.monitoring import get_logger
 from ai_pal.storage.database import DatabaseManager, ARIRepository
+from ai_pal.cache.redis_cache import RedisCache
+from ai_pal.storage.cached_repositories import CachedARIRepository, create_cached_ari_repo
 
 logger = get_logger("ai_pal.api.ari")
 router = APIRouter(prefix="/api/users", tags=["ARI Metrics"])
 
-# Store db_manager reference (set during app startup)
+# Store db_manager and cache references (set during app startup)
 _db_manager: Optional[DatabaseManager] = None
+_cache: Optional[RedisCache] = None
 
 
 def set_db_manager(db_manager: DatabaseManager):
@@ -24,13 +27,25 @@ def set_db_manager(db_manager: DatabaseManager):
     _db_manager = db_manager
 
 
-def get_ari_repository() -> ARIRepository:
-    """Get ARI repository"""
+def set_cache(cache: RedisCache):
+    """Set Redis cache instance"""
+    global _cache
+    _cache = cache
+
+
+def get_ari_repository() -> Union[CachedARIRepository, ARIRepository]:
+    """Get ARI repository with caching if available"""
     if not _db_manager:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Database not initialized"
         )
+
+    # Use cached repository if cache is available and enabled
+    if _cache and _cache.enabled:
+        return create_cached_ari_repo(_db_manager, _cache)
+
+    # Fall back to regular repository
     return ARIRepository(_db_manager)
 
 

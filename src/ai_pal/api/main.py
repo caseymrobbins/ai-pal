@@ -29,6 +29,7 @@ import os
 from ai_pal.core.integrated_system import IntegratedACSystem, SystemConfig
 from ai_pal.monitoring import get_health_checker, get_metrics, get_logger
 from ai_pal.storage.database import DatabaseManager, BackgroundTaskRepository
+from ai_pal.cache.redis_cache import RedisCache
 from ai_pal.api import tasks as tasks_router
 from ai_pal.api import health as health_router
 from ai_pal.api import ari as ari_router
@@ -65,6 +66,9 @@ _ac_system: Optional[IntegratedACSystem] = None
 
 # Initialize database manager for background tasks (singleton)
 _db_manager: Optional[DatabaseManager] = None
+
+# Initialize Redis cache (singleton)
+_redis_cache: Optional[RedisCache] = None
 
 
 def get_ac_system() -> IntegratedACSystem:
@@ -117,6 +121,27 @@ def get_db_manager() -> DatabaseManager:
         logger.info(f"Database manager initialized with {database_url}")
 
     return _db_manager
+
+
+def get_redis_cache() -> RedisCache:
+    """Get or create Redis cache instance"""
+    global _redis_cache
+    if _redis_cache is None:
+        # Get Redis URL from environment or use default
+        redis_url = os.getenv(
+            "REDIS_URL",
+            "redis://localhost:6379/0"
+        )
+
+        _redis_cache = RedisCache(
+            redis_url=redis_url,
+            enabled=os.getenv("CACHE_ENABLED", "true").lower() == "true",
+            ttl_seconds=int(os.getenv("CACHE_TTL_SECONDS", "300"))
+        )
+
+        logger.info(f"Redis cache initialized with {redis_url}")
+
+    return _redis_cache
 
 
 # ===== REQUEST/RESPONSE MODELS =====
@@ -231,20 +256,28 @@ async def startup_event():
         await db_manager.create_tables()
         logger.info("Database tables created/verified")
 
+        # Initialize Redis cache
+        cache = get_redis_cache()
+        logger.info("Redis cache initialized")
+
         # Setup tasks router with database manager
         tasks_router.set_db_manager(db_manager)
 
-        # Setup ARI router with database manager
+        # Setup ARI router with database manager and cache
         ari_router.set_db_manager(db_manager)
+        ari_router.set_cache(cache)
 
-        # Setup goals router with database manager
+        # Setup goals router with database manager and cache
         goals_router.set_db_manager(db_manager)
+        goals_router.set_cache(cache)
 
-        # Setup dashboard router with database manager
+        # Setup dashboard router with database manager and cache
         dashboard_router.set_db_manager(db_manager)
+        dashboard_router.set_cache(cache)
 
-        # Setup predictions router with database manager
+        # Setup predictions router with database manager and cache
         predictions_router.set_db_manager(db_manager)
+        predictions_router.set_cache(cache)
 
         # Setup Celery task base class with database
         from ai_pal.tasks.base_task import AIpalTask
