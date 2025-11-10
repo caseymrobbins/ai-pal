@@ -85,6 +85,23 @@ class ApiClient {
     return response.data;
   }
 
+  async getDashboardHealth() {
+    const response = await this.client.get('/system/health/dashboard');
+    return response.data;
+  }
+
+  async getServicesHealth() {
+    const response = await this.client.get('/system/health/services');
+    return response.data;
+  }
+
+  // ============ Dashboard Endpoints ============
+
+  async getDashboardSummary(userId: string) {
+    const response = await this.client.get(`/users/${userId}/dashboard-summary`);
+    return response.data;
+  }
+
   // ============ User Endpoints ============
 
   async getUserProfile(userId: string) {
@@ -215,10 +232,35 @@ class ApiClient {
 
   // ============ Audit & Security Endpoints ============
 
-  async getAuditLogs(userId: string, limit: number = 100, offset: number = 0) {
+  async getAuditLogs(userId: string, days: number = 30, eventType?: string, severity?: string, limit: number = 100) {
     const response = await this.client.get(`/users/${userId}/audit-logs`, {
-      params: { limit, offset },
+      params: {
+        days,
+        event_type: eventType,
+        severity,
+        limit,
+      },
     });
+    return response.data;
+  }
+
+  async exportAuditLogs(userId: string, days: number = 90, eventType?: string) {
+    const response = await this.client.get(`/users/${userId}/audit-logs/export`, {
+      params: {
+        days,
+        event_type: eventType,
+      },
+    });
+    return response.data;
+  }
+
+  async getAuditStatistics() {
+    const response = await this.client.get('/users/system/audit-stats');
+    return response.data;
+  }
+
+  async getAuditEventTypes() {
+    const response = await this.client.get('/users/system/audit-event-types');
     return response.data;
   }
 
@@ -324,6 +366,27 @@ class ApiClient {
 
   async retryTask(taskId: string) {
     const response = await this.client.post(`/tasks/${taskId}/retry`);
+    return response.data;
+  }
+
+  // ============ Predictions & Analytics Endpoints ============
+
+  async forecastARITrend(userId: string, daysAhead: number = 7) {
+    const response = await this.client.get(`/users/${userId}/ari/forecast`, {
+      params: { days_ahead: daysAhead },
+    });
+    return response.data;
+  }
+
+  async predictGoalCompletion(userId: string, goalId: string) {
+    const response = await this.client.get(
+      `/users/${userId}/goals/${goalId}/completion-estimate`
+    );
+    return response.data;
+  }
+
+  async predictSystemHealth(userId: string) {
+    const response = await this.client.get(`/users/${userId}/system/predictions`);
     return response.data;
   }
 

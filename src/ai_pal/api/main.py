@@ -17,7 +17,7 @@ Authentication: Bearer token (JWT)
 Rate limiting: Configured per endpoint
 """
 
-from fastapi import FastAPI, HTTPException, Depends, Header, status
+from fastapi import FastAPI, HTTPException, Depends, Header, status, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -29,7 +29,15 @@ import os
 from ai_pal.core.integrated_system import IntegratedACSystem, SystemConfig
 from ai_pal.monitoring import get_health_checker, get_metrics, get_logger
 from ai_pal.storage.database import DatabaseManager, BackgroundTaskRepository
+from ai_pal.cache.redis_cache import RedisCache
 from ai_pal.api import tasks as tasks_router
+from ai_pal.api import health as health_router
+from ai_pal.api import ari as ari_router
+from ai_pal.api import goals as goals_router
+from ai_pal.api import audit as audit_router
+from ai_pal.api import dashboard as dashboard_router
+from ai_pal.api import predictions as predictions_router
+from ai_pal.api.websocket import manager as ws_manager, start_heartbeat_task
 from ai_pal.tasks.celery_app import app as celery_app
 from pathlib import Path
 
@@ -58,6 +66,9 @@ _ac_system: Optional[IntegratedACSystem] = None
 
 # Initialize database manager for background tasks (singleton)
 _db_manager: Optional[DatabaseManager] = None
+
+# Initialize Redis cache (singleton)
+_redis_cache: Optional[RedisCache] = None
 
 
 def get_ac_system() -> IntegratedACSystem:
@@ -110,6 +121,27 @@ def get_db_manager() -> DatabaseManager:
         logger.info(f"Database manager initialized with {database_url}")
 
     return _db_manager
+
+
+def get_redis_cache() -> RedisCache:
+    """Get or create Redis cache instance"""
+    global _redis_cache
+    if _redis_cache is None:
+        # Get Redis URL from environment or use default
+        redis_url = os.getenv(
+            "REDIS_URL",
+            "redis://localhost:6379/0"
+        )
+
+        _redis_cache = RedisCache(
+            redis_url=redis_url,
+            enabled=os.getenv("CACHE_ENABLED", "true").lower() == "true",
+            ttl_seconds=int(os.getenv("CACHE_TTL_SECONDS", "300"))
+        )
+
+        logger.info(f"Redis cache initialized with {redis_url}")
+
+    return _redis_cache
 
 
 # ===== REQUEST/RESPONSE MODELS =====
@@ -224,14 +256,38 @@ async def startup_event():
         await db_manager.create_tables()
         logger.info("Database tables created/verified")
 
+        # Initialize Redis cache
+        cache = get_redis_cache()
+        logger.info("Redis cache initialized")
+
         # Setup tasks router with database manager
         tasks_router.set_db_manager(db_manager)
+
+        # Setup ARI router with database manager and cache
+        ari_router.set_db_manager(db_manager)
+        ari_router.set_cache(cache)
+
+        # Setup goals router with database manager and cache
+        goals_router.set_db_manager(db_manager)
+        goals_router.set_cache(cache)
+
+        # Setup dashboard router with database manager and cache
+        dashboard_router.set_db_manager(db_manager)
+        dashboard_router.set_cache(cache)
+
+        # Setup predictions router with database manager and cache
+        predictions_router.set_db_manager(db_manager)
+        predictions_router.set_cache(cache)
 
         # Setup Celery task base class with database
         from ai_pal.tasks.base_task import AIpalTask
         AIpalTask.setup_db(db_manager)
 
         logger.info("Background task system initialized")
+
+        # Start WebSocket heartbeat task
+        await start_heartbeat_task()
+        logger.info("WebSocket heartbeat task started")
 
     except Exception as exc:
         logger.error(f"Error during startup: {exc}", exc_info=True)
@@ -250,8 +306,65 @@ async def shutdown_event():
         logger.error(f"Error during shutdown: {exc}", exc_info=True)
 
 
-# Register background task routes
+# Register API routers
 app.include_router(tasks_router.router)
+app.include_router(health_router.router)
+app.include_router(ari_router.router)
+app.include_router(goals_router.router)
+app.include_router(audit_router.router)
+app.include_router(dashboard_router.router)
+app.include_router(predictions_router.router)
+
+
+# ===== WEBSOCKET ENDPOINT =====
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time dashboard updates
+
+    Accepts WebSocket connections without authentication for broadcast updates.
+    Connect to receive real-time notifications about:
+    - Task status changes
+    - Goal updates
+    - System health changes
+    - Critical events
+    """
+    await ws_manager.connect(websocket)
+    try:
+        while True:
+            # Keep connection alive and listen for messages
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        await ws_manager.disconnect(websocket)
+        logger.info("WebSocket connection closed")
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+        await ws_manager.disconnect(websocket)
+
+
+@app.websocket("/ws/{user_id}")
+async def websocket_user_endpoint(websocket: WebSocket, user_id: str):
+    """
+    WebSocket endpoint for user-specific real-time updates
+
+    Accepts WebSocket connections for a specific user to receive:
+    - Task status changes for their tasks
+    - Goal updates for their goals
+    - System health changes
+    - Critical events relevant to the user
+    """
+    await ws_manager.connect(websocket, user_id)
+    try:
+        while True:
+            # Keep connection alive and listen for messages
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        await ws_manager.disconnect(websocket, user_id)
+        logger.info(f"WebSocket connection closed for user {user_id}")
+    except Exception as e:
+        logger.error(f"WebSocket error for user {user_id}: {e}")
+        await ws_manager.disconnect(websocket, user_id)
 
 
 # ===== CORE AC SYSTEM =====

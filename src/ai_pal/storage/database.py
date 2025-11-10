@@ -327,8 +327,8 @@ class DatabaseManager:
         self,
         database_url: str = "sqlite+aiosqlite:///./ai_pal.db",
         echo: bool = False,
-        pool_size: int = 5,
-        max_overflow: int = 10
+        pool_size: int = 20,
+        max_overflow: int = 40
     ):
         """
         Initialize database manager
@@ -338,8 +338,8 @@ class DatabaseManager:
                 - SQLite: "sqlite+aiosqlite:///./ai_pal.db"
                 - PostgreSQL: "postgresql+asyncpg://user:pass@localhost/ai_pal"
             echo: Echo SQL statements (for debugging)
-            pool_size: Connection pool size
-            max_overflow: Max overflow connections
+            pool_size: Connection pool size (default 20 for PostgreSQL)
+            max_overflow: Max overflow connections (default 40)
         """
         self.database_url = database_url
         self.is_sqlite = "sqlite" in database_url.lower()
@@ -353,13 +353,30 @@ class DatabaseManager:
                 poolclass=NullPool
             )
         else:
-            # PostgreSQL with connection pooling
+            # PostgreSQL with optimized connection pooling
+            # Production settings:
+            # - pool_pre_ping: Test connections before use
+            # - pool_recycle: Recycle connections after 1 hour
+            # - connect_args: Server-side optimizations
+            connect_args = {
+                "timeout": 10,
+                "server_settings": {"jit": "off"},  # Disable JIT for predictable performance
+            }
+
+            # Add SSL support for production
+            if "postgresql+asyncpg" in database_url and "?sslmode" in database_url:
+                # SSL is configured in the URL
+                pass
+
             self.engine = create_async_engine(
                 database_url,
                 echo=echo,
                 pool_size=pool_size,
                 max_overflow=max_overflow,
-                poolclass=QueuePool
+                poolclass=QueuePool,
+                pool_pre_ping=True,  # Verify connections before checkout
+                pool_recycle=3600,   # Recycle connections every hour
+                connect_args=connect_args
             )
 
         # Create async session factory
@@ -369,7 +386,10 @@ class DatabaseManager:
             expire_on_commit=False
         )
 
-        logger.info(f"DatabaseManager initialized with {database_url}")
+        logger.info(
+            f"DatabaseManager initialized with {database_url} "
+            f"(pool_size={pool_size}, max_overflow={max_overflow})"
+        )
 
     async def create_tables(self):
         """Create all tables"""

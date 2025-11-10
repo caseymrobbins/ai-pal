@@ -38,19 +38,33 @@ export const ARIMetrics: React.FC<{ userId: string }> = ({ userId }) => {
     );
   }
 
-  const dimensions = ariMetrics.dimensions;
-  const labels = [
-    'Decision Quality',
-    'Skill Development',
-    'AI Reliance',
-    'Bottleneck Resolution',
-    'User Confidence',
-    'Engagement',
-    'Autonomy Perception',
-  ];
+  // Handle both array and object formats for dimensions
+  let dimensionData: Record<string, number> = {};
+  let labels: string[] = [];
 
-  const values = Object.values(dimensions);
-  const isAlert = ariMetrics.overall_score < 0.5;
+  if (Array.isArray(ariMetrics.dimensions)) {
+    // New API format: array of {name, value} objects
+    ariMetrics.dimensions.forEach((dim: any) => {
+      dimensionData[dim.name] = dim.value / 100; // Normalize to 0-1
+      labels.push(dim.name);
+    });
+  } else {
+    // Legacy format: object with dimension names as keys
+    dimensionData = ariMetrics.dimensions;
+    labels = [
+      'Decision Quality',
+      'Skill Development',
+      'AI Reliance',
+      'Bottleneck Resolution',
+      'User Confidence',
+      'Engagement',
+      'Autonomy Perception',
+    ];
+  }
+
+  const values = Object.values(dimensionData);
+  const currentScore = ariMetrics.current_score || ariMetrics.overall_score || 50;
+  const isAlert = currentScore < 50;
 
   const chartData = {
     labels,
@@ -109,10 +123,10 @@ export const ARIMetrics: React.FC<{ userId: string }> = ({ userId }) => {
           <div className="bg-gradient-to-br from-primary-50 to-primary-100 rounded-lg p-6 text-center">
             <p className="text-gray-600 text-sm font-medium mb-2">Overall Score</p>
             <p className="text-4xl font-bold text-primary-600">
-              {(ariMetrics.overall_score * 100).toFixed(1)}%
+              {currentScore.toFixed(1)}%
             </p>
             <p className="text-xs text-gray-500 mt-2">
-              Last updated: {new Date(ariMetrics.timestamp).toLocaleTimeString()}
+              Last updated: {new Date(ariMetrics.update_timestamp || ariMetrics.timestamp).toLocaleTimeString()}
             </p>
           </div>
         </div>
@@ -120,13 +134,13 @@ export const ARIMetrics: React.FC<{ userId: string }> = ({ userId }) => {
         {/* Top 3 Strengths */}
         <div className="col-span-3 sm:col-span-2">
           <div className="grid grid-cols-3 gap-2">
-            {Object.entries(dimensions)
+            {Object.entries(dimensionData)
               .sort(([, a], [, b]) => b - a)
               .slice(0, 3)
               .map(([key, value]) => (
                 <div key={key} className="bg-green-50 rounded-lg p-4">
                   <p className="text-xs text-gray-600 font-medium capitalize mb-1">
-                    {key.replace(/_/g, ' ')}
+                    {key}
                   </p>
                   <p className="text-2xl font-bold text-green-600">{(value * 100).toFixed(0)}%</p>
                   <div className="mt-2 h-1 bg-green-200 rounded-full overflow-hidden">
